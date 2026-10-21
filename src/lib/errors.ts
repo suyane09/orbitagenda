@@ -19,6 +19,20 @@ export function describeError(error: unknown, fallback = 'Não foi possível con
   if (msg.includes('invalid_timezone')) return 'Fuso horário inválido. Escolha uma das opções da lista.'
   if (msg.includes('not_authenticated') || code === '28000') return 'Sua sessão expirou. Entre novamente.'
   if (msg.includes('services_establishment_name_uq')) return 'Já existe um serviço com esse nome. Escolha outro nome.'
+  const conflicts = /block_conflicts_appointments:(\d+)/.exec(msg)
+  if (conflicts) {
+    const n = Number(conflicts[1])
+    return `Há ${n} ${n === 1 ? 'agendamento ativo' : 'agendamentos ativos'} nesse período. Remarque ou cancele ${n === 1 ? 'o atendimento' : 'os atendimentos'} antes de bloquear.`
+  }
+  if (msg.includes('working_hours_overlap')) return 'Há trechos de horário sobrepostos no mesmo dia. Revise o expediente e os intervalos.'
+  if (msg.includes('block_overlap') || (code === '23P01' && !msg.includes('appointments_no_overlap'))) return 'Já existe uma folga, férias ou bloqueio nesse período para o mesmo escopo. Edite o existente ou escolha outras datas.'
+  if (msg.includes('block_in_the_past')) return 'O período não pode estar inteiramente no passado.'
+  if (msg.includes('vacation_requires_professional')) return 'Férias pertencem a um profissional. Escolha quem vai sair.'
+  if (msg.includes('range_too_long')) return 'O período pode ter no máximo 366 dias.'
+  if (msg.includes('invalid_range')) return 'Período inválido. A data/hora final precisa ser depois da inicial.'
+  if (msg.includes('invalid_time')) return 'Horário inválido. Use horas e minutos cheios (ex.: 09:30).'
+  if (msg.includes('too_many_segments')) return 'Há trechos demais no expediente. Reduza o número de intervalos.'
+  if (msg.includes('block_not_found')) return 'Registro não encontrado. Atualize a página e tente de novo.'
   if (code === '23503' && msg.includes('update or delete on table')) return 'Este item já tem agendamentos vinculados e não pode ser excluído. Desative-o para tirá-lo de uso.'
   if (code === '23503') return 'Algum item selecionado não pertence a este estabelecimento. Atualize a página e tente de novo.'
   if (code === '23514') return 'Algum valor está fora do permitido. Revise os campos e tente de novo.'

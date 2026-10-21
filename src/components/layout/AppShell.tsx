@@ -10,7 +10,7 @@ const items: Array<{ label: string; to?: string }> = [
   { label: 'Clientes' },
   { label: 'Serviços', to: '/app/servicos' },
   { label: 'Profissionais', to: '/app/profissionais' },
-  { label: 'Horários' },
+  { label: 'Horários', to: '/app/horarios' },
 ]
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
