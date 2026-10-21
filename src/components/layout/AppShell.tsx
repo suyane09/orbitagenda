@@ -5,7 +5,13 @@ import { useAuth } from '@/features/auth/AuthProvider'
 import { useAccount } from '@/features/establishments/AccountProvider'
 import { roleLabel } from '@/lib/labels'
 
-const soon = ['Agenda', 'Clientes', 'Serviços', 'Equipe']
+const items: Array<{ label: string; to?: string }> = [
+  { label: 'Agenda' },
+  { label: 'Clientes' },
+  { label: 'Serviços', to: '/app/servicos' },
+  { label: 'Profissionais', to: '/app/profissionais' },
+  { label: 'Horários' },
+]
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user, signOut } = useAuth()
@@ -36,9 +42,11 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       <nav aria-label="Principal" className="mt-6 flex-1 space-y-1">
         {current && <NavLink to="/app" end className={link} onClick={onNavigate}>Visão geral</NavLink>}
-        {current && soon.map((s) => (
-          <span key={s} aria-disabled="true" className="flex h-10 cursor-not-allowed items-center justify-between px-3 text-[0.95rem] text-white/30">
-            {s}<span className="text-xs">em breve</span>
+        {current && items.map((i) => i.to ? (
+          <NavLink key={i.label} to={i.to} className={link} onClick={onNavigate}>{i.label}</NavLink>
+        ) : (
+          <span key={i.label} aria-disabled="true" className="flex h-10 cursor-not-allowed items-center justify-between px-3 text-[0.95rem] text-white/30">
+            {i.label}<span className="text-xs">em breve</span>
           </span>
         ))}
         {isSuperadmin && <NavLink to="/plataforma" className={link} onClick={onNavigate}>Plataforma</NavLink>}

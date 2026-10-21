@@ -18,6 +18,13 @@ export function describeError(error: unknown, fallback = 'Não foi possível con
   if (msg.includes('invalid_name')) return 'O nome do estabelecimento precisa ter entre 2 e 80 caracteres.'
   if (msg.includes('invalid_timezone')) return 'Fuso horário inválido. Escolha uma das opções da lista.'
   if (msg.includes('not_authenticated') || code === '28000') return 'Sua sessão expirou. Entre novamente.'
+  if (msg.includes('services_establishment_name_uq')) return 'Já existe um serviço com esse nome. Escolha outro nome.'
+  if (code === '23503' && msg.includes('update or delete on table')) return 'Este item já tem agendamentos vinculados e não pode ser excluído. Desative-o para tirá-lo de uso.'
+  if (code === '23503') return 'Algum item selecionado não pertence a este estabelecimento. Atualize a página e tente de novo.'
+  if (code === '23514') return 'Algum valor está fora do permitido. Revise os campos e tente de novo.'
+  if (code === '23505') return 'Já existe um registro igual a este.'
+  if (code === 'P0002' || msg.includes('professional_not_found')) return 'Registro não encontrado. Atualize a página e tente de novo.'
+  if (msg.includes('too_many_services')) return 'Selecione no máximo 100 serviços.'
   if (code === '42501') return 'Você não tem permissão para fazer isso.'
   return fallback
 }

@@ -1,7 +1,8 @@
-import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
+import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 
-const control =
-  'h-11 w-full rounded-control border bg-surface px-3.5 text-[0.95rem] text-ink placeholder:text-slate/60 transition-colors focus:border-orbit focus:outline-none focus:ring-2 focus:ring-orbit/20'
+const base =
+  'w-full rounded-control border bg-surface px-3.5 text-[0.95rem] text-ink placeholder:text-slate/60 transition-colors focus:border-orbit focus:outline-none focus:ring-2 focus:ring-orbit/20'
+const control = `h-11 ${base}`
 
 function Shell({ id, label, error, hint, children }: { id: string; label: string; error?: string | undefined; hint?: string | undefined; children: ReactNode }) {
   return (
@@ -36,6 +37,17 @@ export function SelectField({ label, error, options, className = '', ...rest }: 
       <select id={id} aria-invalid={!!error} className={`${control} ${error ? 'border-danger' : 'border-hairline'} ${className}`} {...rest}>
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
+    </Shell>
+  )
+}
+
+interface TextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> { label: string; error?: string | undefined; hint?: string | undefined }
+export function TextAreaField({ label, error, hint, className = '', ...rest }: TextAreaProps) {
+  const id = useId()
+  return (
+    <Shell id={id} label={label} error={error} hint={hint}>
+      <textarea id={id} rows={3} aria-invalid={!!error} aria-describedby={error || hint ? `${id}-msg` : undefined}
+        className={`${base} min-h-24 resize-y py-2.5 ${error ? 'border-danger' : 'border-hairline'} ${className}`} {...rest} />
     </Shell>
   )
 }

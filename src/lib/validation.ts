@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { parseBRL } from './money'
 
 const email = z.string().trim().toLowerCase().pipe(z.email('Informe um e-mail válido.'))
 const password = z
@@ -66,3 +67,35 @@ export function fieldErrors(error: z.ZodError): Record<string, string> {
   }
   return out
 }
+
+// ---- Etapa 2 · catálogo ------------------------------------------------------
+
+export const SERVICE_PRICE_MAX_CENTS = 10_000_000
+export const SERVICE_DURATION_MIN = 5
+export const SERVICE_DURATION_MAX = 720
+
+export const serviceSchema = z.object({
+  name: z.string().trim().min(2, 'O nome precisa ter pelo menos 2 caracteres.').max(80, 'O nome pode ter no máximo 80 caracteres.'),
+  description: z.string().trim().max(500, 'A descrição pode ter no máximo 500 caracteres.'),
+  category: z.string().trim().max(40, 'A categoria pode ter no máximo 40 caracteres.'),
+  price: z.string()
+    .refine((v) => parseBRL(v) !== null, 'Informe um valor válido, por exemplo 45,00.')
+    .refine((v) => { const c = parseBRL(v); return c === null || c <= SERVICE_PRICE_MAX_CENTS }, 'O valor máximo é R$ 100.000,00.'),
+  duration: z.string().trim()
+    .regex(/^\d+$/, 'Informe a duração em minutos, só números.')
+    .refine((v) => Number(v) >= SERVICE_DURATION_MIN && Number(v) <= SERVICE_DURATION_MAX,
+      `A duração deve ficar entre ${SERVICE_DURATION_MIN} e ${SERVICE_DURATION_MAX} minutos.`),
+  isActive: z.boolean(),
+})
+
+export const PROFESSIONAL_COLORS = [
+  '#3B36D9', '#1B7F55', '#B92D33', '#9A5B00', '#0F7490', '#8A3FC4', '#C2410C', '#475569',
+] as const
+
+export const professionalSchema = z.object({
+  name: z.string().trim().min(2, 'O nome precisa ter pelo menos 2 caracteres.').max(80, 'O nome pode ter no máximo 80 caracteres.'),
+  bio: z.string().trim().max(500, 'A apresentação pode ter no máximo 500 caracteres.'),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Escolha uma cor da lista.'),
+  isActive: z.boolean(),
+  serviceIds: z.array(z.string()).max(100, 'Selecione no máximo 100 serviços.'),
+})

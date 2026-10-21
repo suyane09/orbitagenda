@@ -22,3 +22,23 @@ export interface Profile { id: string; full_name: string }
 export interface TeamMember { membershipId: string; userId: string; name: string; role: MembershipRole; isActive: boolean }
 
 export interface TodayAppointment { id: string; starts_at: string; ends_at: string; status: string }
+
+export interface Service {
+  id: string
+  name: string
+  description: string | null
+  category: string | null
+  duration_minutes: number
+  price_cents: number
+  is_active: boolean
+}
+
+export interface Professional {
+  id: string
+  name: string
+  bio: string | null
+  color: string
+  is_active: boolean
+  /** Serviços vinculados (professional_services). */
+  serviceIds: string[]
+}

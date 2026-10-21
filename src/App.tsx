@@ -15,6 +15,8 @@ const ResetPasswordPage = lazy(() => import('@/features/auth/ResetPasswordPage')
 const OnboardingPage = lazy(() => import('@/features/establishments/OnboardingPage'))
 const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPage'))
 const PlatformPage = lazy(() => import('@/features/platform/PlatformPage'))
+const ServicesPage = lazy(() => import('@/features/services/ServicesPage'))
+const ProfessionalsPage = lazy(() => import('@/features/professionals/ProfessionalsPage'))
 
 function NotFound() {
   return <ErrorState title="Página não encontrada" message="O endereço não existe ou foi movido." action={<Link to="/app" className="inline-flex h-11 items-center rounded-control border border-hairline px-5 text-sm font-medium">Ir ao painel</Link>} />
@@ -42,6 +44,8 @@ export default function App() {
                 <Route element={<AppShell />}>
                   <Route element={<RequireEstablishment />}>
                     <Route path="/app" element={<DashboardPage />} />
+                    <Route path="/app/servicos" element={<ServicesPage />} />
+                    <Route path="/app/profissionais" element={<ProfessionalsPage />} />
                   </Route>
                   <Route element={<RequireSuperadmin />}>
                     <Route path="/plataforma" element={<PlatformPage />} />

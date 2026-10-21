@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { EmptyState, ErrorState } from '@/components/ui/States'
 import { Spinner } from '@/components/ui/Spinner'
@@ -76,7 +77,9 @@ export default function DashboardPage() {
                 ))}
               </dl>
               {data.counts.professionals + data.counts.services === 0 && (
-                <p className="mt-4 text-sm leading-relaxed text-slate">O cadastro de profissionais, serviços e horários chega na próxima etapa do Orbit Agenda.</p>
+                <p className="mt-4 text-sm leading-relaxed text-slate">
+                  Comece cadastrando seus <Link to="/app/servicos" className="font-medium text-orbit underline">serviços</Link> e <Link to="/app/profissionais" className="font-medium text-orbit underline">profissionais</Link>.
+                </p>
               )}
             </section>
 
