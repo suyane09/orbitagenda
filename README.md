@@ -1,4 +1,4 @@
-# Orbit Agenda — Etapa 1 (fundação) + Etapa 2 (Serviços, Profissionais e Horários)
+# Orbit Agenda — Etapa 1 (fundação) + Etapa 2 (Serviços, Profissionais, Horários e Clientes)
 
 SaaS multiempresa para barbearias e salões. React + Vite + TypeScript + Tailwind v4 + Supabase.
 
@@ -14,7 +14,7 @@ npm run dev
 npm i -g supabase
 supabase init               # não sobrescreve supabase/migrations
 supabase link --project-ref SEU_REF
-supabase db push            # aplica as 8 migrações em ordem (revise a 0007 e a 0008 antes)
+supabase db push            # aplica as 9 migrações em ordem (revise a 0007, 0008 e 0009 antes)
 ```
 No painel do Supabase → Authentication → URL Configuration, inclua em *Redirect URLs*:
 `http://localhost:5173/entrar` e `http://localhost:5173/redefinir-senha` (e os equivalentes de produção).
@@ -40,10 +40,10 @@ npm run typecheck
 npm test                    # unitários (Vitest)
 npm run test:db             # RLS/isolamento em PostgreSQL real (precisa de psql e um Postgres)
 ```
-`test:db` usa `ADMIN_URL` (padrão `postgresql://postgres:postgres@localhost:5432/postgres`), cria um banco descartável por arquivo `NN_*.sql`, aplica um *shim* mínimo do Supabase (`auth.uid()`, roles `anon`/`authenticated`) + as migrações e roda `10_tenant_isolation.sql`, `20_catalog.sql` e `30_schedule.sql`.
+`test:db` usa `ADMIN_URL` (padrão `postgresql://postgres:postgres@localhost:5432/postgres`), cria um banco descartável por arquivo `NN_*.sql`, aplica um *shim* mínimo do Supabase (`auth.uid()`, roles `anon`/`authenticated`) + as migrações e roda `10_tenant_isolation.sql`, `20_catalog.sql`, `30_schedule.sql` e `40_customers.sql`.
 
 ## Limitações conhecidas da Etapa 1
-- Convite de funcionários e telas de clientes e agenda ainda não existem (etapas seguintes); vínculos `staff` são criados por SQL privilegiado.
+- Convite de funcionários e tela de agenda ainda não existem (etapas seguintes); vínculos `staff` são criados por SQL privilegiado.
 - Os testes de banco rodam em Postgres puro com shim; ainda não foram executados contra um projeto Supabase real.
 - Tipos do banco escritos à mão no frontend; gere com `supabase gen types typescript` quando linkar o projeto.
 "# orbitagenda" 

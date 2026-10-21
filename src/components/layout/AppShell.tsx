@@ -7,7 +7,7 @@ import { roleLabel } from '@/lib/labels'
 
 const items: Array<{ label: string; to?: string }> = [
   { label: 'Agenda' },
-  { label: 'Clientes' },
+  { label: 'Clientes', to: '/app/clientes' },
   { label: 'Serviços', to: '/app/servicos' },
   { label: 'Profissionais', to: '/app/profissionais' },
   { label: 'Horários', to: '/app/horarios' },
