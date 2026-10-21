@@ -1,0 +1,60 @@
+import { lazy, Suspense } from 'react'
+import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom'
+import { AppShell } from '@/components/layout/AppShell'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { ErrorState, FullScreenLoader } from '@/components/ui/States'
+import { AuthProvider } from '@/features/auth/AuthProvider'
+import { PublicOnly, RequireAuth } from '@/features/auth/guards'
+import { RequireEstablishment, RequireSuperadmin } from '@/features/establishments/guards'
+import { getEnvError } from '@/lib/env'
+
+const LoginPage = lazy(() => import('@/features/auth/LoginPage'))
+const SignUpPage = lazy(() => import('@/features/auth/SignUpPage'))
+const ForgotPasswordPage = lazy(() => import('@/features/auth/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('@/features/auth/ResetPasswordPage'))
+const OnboardingPage = lazy(() => import('@/features/establishments/OnboardingPage'))
+const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPage'))
+const PlatformPage = lazy(() => import('@/features/platform/PlatformPage'))
+
+function NotFound() {
+  return <ErrorState title="Página não encontrada" message="O endereço não existe ou foi movido." action={<Link to="/app" className="inline-flex h-11 items-center rounded-control border border-hairline px-5 text-sm font-medium">Ir ao painel</Link>} />
+}
+
+export default function App() {
+  const envError = getEnvError()
+  if (envError) return <ErrorState title="Configuração incompleta" message={envError} />
+
+  return (
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <Suspense fallback={<FullScreenLoader />}>
+            <Routes>
+              <Route element={<PublicOnly />}>
+                <Route path="/entrar" element={<LoginPage />} />
+                <Route path="/cadastro" element={<SignUpPage />} />
+                <Route path="/recuperar-senha" element={<ForgotPasswordPage />} />
+              </Route>
+              <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
+
+              <Route element={<RequireAuth />}>
+                <Route path="/criar-estabelecimento" element={<OnboardingPage />} />
+                <Route element={<AppShell />}>
+                  <Route element={<RequireEstablishment />}>
+                    <Route path="/app" element={<DashboardPage />} />
+                  </Route>
+                  <Route element={<RequireSuperadmin />}>
+                    <Route path="/plataforma" element={<PlatformPage />} />
+                  </Route>
+                </Route>
+              </Route>
+
+              <Route path="/" element={<Navigate to="/app" replace />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
+  )
+}
