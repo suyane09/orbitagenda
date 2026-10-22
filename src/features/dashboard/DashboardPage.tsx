@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Icon } from '@/components/ui/Icon'
+import { Icon, type IconName } from '@/components/ui/Icon'
 import { Spinner } from '@/components/ui/Spinner'
 import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/features/auth/AuthProvider'
@@ -10,9 +10,8 @@ import { STATUS_CHIP, STATUS_LABEL, isActive, zoned } from '@/lib/agenda'
 import { describeError } from '@/lib/errors'
 import { roleLabel } from '@/lib/labels'
 import { formatBRL, formatDuration } from '@/lib/money'
-import { formatLongDate, greeting } from '@/lib/time'
+import { formatLongDate } from '@/lib/time'
 import { loadDashboard, type DashboardData } from './api'
-import { DayOrbit } from './DayOrbit'
 
 type Filter = 'all' | 'pending' | 'confirmed' | 'completed'
 
@@ -28,14 +27,20 @@ const matches = (f: Filter, s: AppointmentStatus) =>
 
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('')
 const bar = 'block animate-pulse rounded bg-paper motion-reduce:animate-none'
-const COLS = 'grid-cols-[3.25rem_minmax(0,1fr)_auto] md:grid-cols-[4.5rem_minmax(0,1.5fr)_minmax(0,1fr)_5.5rem_6rem_6.5rem]'
-const ROW_GRID = `grid ${COLS} gap-x-3 gap-y-2 md:items-center md:gap-y-0`
+const textLink = 'font-medium text-orbit underline-offset-2 hover:underline'
+const card = 'min-w-0 rounded-xl border border-hairline bg-surface shadow-[0_1px_2px_rgb(17_20_26/0.04)]'
+const pill = 'inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-medium transition-[background-color,border-color,transform] duration-150 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100'
+const pillPrimary = `${pill} bg-orbit text-white hover:bg-orbit-deep`
+const pillOutline = `${pill} border border-hairline bg-surface text-ink hover:border-slate/50`
 
-function Panel({ title, meta, children }: { title: string; meta?: ReactNode; children: ReactNode }) {
+/* Na agenda, o layout muda pela largura DELA (container query @[40rem]), não pela da tela.
+   As classes precisam estar escritas por extenso para o Tailwind gerá-las. */
+
+function Panel({ title, meta, children, className = '' }: { title: string; meta?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section aria-label={title} className="min-w-0 rounded-lg border border-hairline bg-surface">
-      <header className="flex items-center justify-between gap-3 border-b border-hairline px-4 py-3">
-        <h2 className="text-sm font-semibold">{title}</h2>
+    <section aria-label={title} className={`${card} ${className}`}>
+      <header className="flex items-center justify-between gap-3 px-5 pb-1 pt-4">
+        <h2 className="font-display text-base font-semibold tracking-tight">{title}</h2>
         {meta && <div className="text-xs text-slate">{meta}</div>}
       </header>
       {children}
@@ -43,126 +48,223 @@ function Panel({ title, meta, children }: { title: string; meta?: ReactNode; chi
   )
 }
 
-// ── Faixa de indicadores ────────────────────────────────────────────────────────
-function Stat({ label, value, hint, loading, className = '', children }: {
-  label: string; value: string; hint?: ReactNode; loading: boolean; className?: string; children?: ReactNode
+// ── Indicadores ─────────────────────────────────────────────────────────────────
+function Kpi({ label, tone, value, hint, loading, primary = false, className = '', children }: {
+  label: string; tone?: string; value: string; hint?: ReactNode; loading: boolean; primary?: boolean; className?: string; children?: ReactNode
 }) {
   return (
-    <div className={`min-w-0 border-hairline px-4 py-3.5 sm:px-5 sm:py-4 ${className}`}>
-      <p className="text-xs text-slate">{label}</p>
+    <div className={`min-w-0 border-hairline px-4 py-4 sm:px-5 sm:py-5 ${className}`}>
+      <p className="flex items-center gap-2 text-[0.8125rem] font-medium text-slate">
+        {tone && <span aria-hidden="true" className={`size-1.5 rounded-full ${tone}`} />}{label}
+      </p>
       {loading ? (
-        <div className="mt-2 space-y-2" role="status" aria-label={`Carregando ${label}`}>
-          <span className={`${bar} h-7 w-16`} /><span className={`${bar} h-3 w-24`} />
+        <div className="mt-3 space-y-2.5" role="status" aria-label={`Carregando ${label}`}>
+          <span className={`${bar} ${primary ? 'h-10 w-20' : 'h-8 w-16'}`} /><span className={`${bar} h-3 w-24`} />
         </div>
       ) : (
         <>
-          <p className="mt-1.5 truncate font-display text-[1.75rem] font-semibold leading-none tracking-tight tabular-nums sm:text-[2rem]">{value}</p>
+          <p className={`mt-2 truncate font-display font-semibold leading-none tracking-tight tabular-nums ${primary ? 'text-[1.875rem] sm:text-[2.5rem] xl:text-[2.75rem]' : 'text-[1.75rem] sm:text-[2rem]'}`}>{value}</p>
           {children}
-          <p className="mt-2 truncate text-xs text-slate">{hint}</p>
+          <p className="mt-2.5 truncate text-xs text-slate">{hint}</p>
         </>
       )}
     </div>
   )
 }
 
-// ── Agenda ───────────────────────────────────────────────────────────────────────
-function NowLine({ time }: { time: string }) {
+// ── Linha do tempo da agenda ────────────────────────────────────────────────────
+/** Trilho vertical: o nó fica alinhado à primeira linha (empilhado) ou ao centro (colunas). */
+function Rail({ first, last, centered = false, children }: { first: boolean; last: boolean; centered?: boolean; children: ReactNode }) {
+  const top = centered ? 'top-1/2' : `top-[1.375rem] @[40rem]:top-1/2`
+  const half = centered ? 'h-1/2' : `h-[1.375rem] @[40rem]:h-1/2`
   return (
-    <li aria-label={`Agora, ${time}`} className="flex items-center gap-2 px-3 py-1 md:px-4">
-      <span className="rounded bg-orbit px-1.5 py-0.5 text-[0.6875rem] font-semibold tabular-nums text-white">{time}</span>
-      <span aria-hidden="true" className="h-px flex-1 bg-orbit/40" />
+    <div aria-hidden="true" className="relative">
+      {!(first && last) && (
+        <span className={`absolute left-1/2 w-px -translate-x-1/2 bg-hairline ${first ? `bottom-0 ${top}` : last ? `top-0 ${half}` : 'inset-y-0'}`} />
+      )}
+      <span className={`absolute left-1/2 z-10 grid -translate-x-1/2 -translate-y-1/2 place-items-center ${top}`}>{children}</span>
+    </div>
+  )
+}
+
+function Node({ status, live }: { status: AppointmentStatus; live: boolean }) {
+  if (live) {
+    return (
+      <span className="relative grid size-4 place-items-center">
+        <span className="absolute inset-0 animate-ping rounded-full bg-orbit/30 motion-reduce:animate-none" />
+        <span className="relative size-3 rounded-full bg-orbit ring-[3px] ring-surface" />
+      </span>
+    )
+  }
+  if (status === 'completed') return <span className="grid size-4 place-items-center rounded-full bg-ok text-white ring-[3px] ring-surface"><Icon name="check" className="size-2.5" /></span>
+  if (status === 'confirmed') return <span className="size-3 rounded-full bg-orbit ring-[3px] ring-surface" />
+  if (status === 'scheduled') return <span className="size-3 rounded-full border-2 border-signal bg-surface ring-[3px] ring-surface" />
+  return <span className="size-3 rounded-full bg-slate/40 ring-[3px] ring-surface" />
+}
+
+function AdvanceButton({ advance, busy, waiting, onClick }: { advance: AppointmentStatus; busy: boolean; waiting: boolean; onClick: () => void }) {
+  return (
+    <button type="button" disabled={busy || waiting} onClick={onClick}
+      title={waiting ? 'Disponível após o horário de início' : undefined}
+      className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-[0.8125rem] font-medium transition-[background-color,border-color,transform] duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 ${
+        advance === 'confirmed' ? 'bg-ink text-white hover:bg-graphite' : 'border border-hairline bg-surface hover:border-slate/50'
+      }`}>
+      {busy && <Spinner className="size-3.5" />}{advance === 'confirmed' ? 'Confirmar' : 'Concluir'}
+    </button>
+  )
+}
+
+const ROW_COLS = `grid-cols-[2.75rem_1.25rem_minmax(0,1fr)] @[40rem]:grid-cols-[3rem_1.5rem_minmax(0,1fr)_6.5rem_5.5rem]`
+
+function NowRow({ time, first, last }: { time: string; first: boolean; last: boolean }) {
+  return (
+    <li aria-label={`Agora, ${time}`} className={`grid items-center gap-x-2 px-1 @[40rem]:gap-x-3 @[40rem]:px-2 ${ROW_COLS}`}>
+      <span className="justify-self-start rounded-md bg-orbit px-1.5 py-0.5 text-[0.6875rem] font-semibold tabular-nums text-white">{time}</span>
+      <div className="relative h-7"><Rail first={first} last={last} centered>
+        <span className="size-2.5 rounded-full bg-orbit-glow ring-[3px] ring-surface" />
+      </Rail></div>
+      <span aria-hidden="true" className={`h-px bg-gradient-to-r from-orbit/50 to-transparent @[40rem]:col-span-3`} />
     </li>
   )
 }
 
-function AgendaRow({ a, tz, now, busy, onAdvance }: {
-  a: AppointmentRow; tz: string; now: Date; busy: boolean; onAdvance: (a: AppointmentRow, s: AppointmentStatus) => void
+function AgendaRow({ a, tz, now, busy, first, last, onAdvance }: {
+  a: AppointmentRow; tz: string; now: Date; busy: boolean; first: boolean; last: boolean; onAdvance: (a: AppointmentRow, s: AppointmentStatus) => void
 }) {
   const start = new Date(a.starts_at)
   const end = new Date(a.ends_at)
   const started = start <= now
   const live = isActive(a.status) && started && now < end
-  const minutes = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000))
+  const total = end.getTime() - start.getTime()
+  const minutes = Math.max(0, Math.round(total / 60_000))
+  const elapsed = live && total > 0 ? Math.min(100, Math.max(0, ((now.getTime() - start.getTime()) / total) * 100)) : 0
   const advance: AppointmentStatus | null = a.status === 'scheduled' ? 'confirmed' : a.status === 'confirmed' ? 'completed' : null
   const waiting = advance === 'completed' && !started
+  const done = a.status === 'completed' || a.status === 'no_show' || a.status === 'cancelled'
+  const go = advance ? () => onAdvance(a, advance) : undefined
 
   return (
-    <li className={`${ROW_GRID} border-l-2 px-3 py-3 transition-colors duration-150 hover:bg-paper/70 motion-reduce:transition-none md:px-4 ${
-      live ? 'border-l-orbit bg-orbit-soft/40' : 'border-l-transparent'
-    } ${a.status === 'completed' || a.status === 'no_show' ? 'opacity-70' : ''}`}>
-      <div>
-        <p className="font-display text-[0.95rem] font-semibold leading-tight tabular-nums">{zoned(a.starts_at, tz).time}</p>
+    <li className={`group grid gap-x-2 rounded-lg px-1 transition-colors duration-150 motion-reduce:transition-none @[40rem]:gap-x-3 @[40rem]:px-2 ${ROW_COLS} ${live ? 'bg-orbit-soft/60' : 'hover:bg-paper/80'}`}>
+      <div className={`py-3 @[40rem]:flex @[40rem]:flex-col @[40rem]:justify-center @[40rem]:py-0`}>
+        <p className={`font-display text-[0.9375rem] font-semibold leading-5 tabular-nums ${done ? 'text-slate' : ''}`}>{zoned(a.starts_at, tz).time}</p>
         <p className="text-xs tabular-nums text-slate">{zoned(a.ends_at, tz).time}</p>
       </div>
-      <div className="min-w-0">
+
+      <Rail first={first} last={last}><Node status={a.status} live={live} /></Rail>
+
+      <div className="min-w-0 py-3">
         <div className="flex items-center gap-2">
-          <p className="truncate text-[0.9rem] font-medium">{a.customer_name}</p>
+          <p className={`truncate text-[0.9375rem] font-medium leading-5 ${done ? 'text-graphite' : ''}`}>{a.customer_name}</p>
           {live && (
-            <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-orbit">
-              <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-orbit motion-reduce:animate-none" />Em andamento
-            </span>
+            <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-orbit">Em andamento</span>
           )}
         </div>
-        <p className="truncate text-[0.8125rem] text-slate">
-          <span className="md:hidden">{a.service_name} · {a.professional_name}</span>
-          <span className="hidden md:inline">{a.service_name} · {formatDuration(minutes)}{a.customer_phone ? ` · ${a.customer_phone}` : ''}</span>
+        <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.8125rem] text-slate">
+          <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: a.professional_color }} />
+          <span className="truncate">
+            {a.professional_name} · {a.service_name} · {formatDuration(minutes)}
+            {a.customer_phone && <span className={`hidden @[40rem]:inline`}> · {a.customer_phone}</span>}
+          </span>
         </p>
-      </div>
-      <p className="hidden min-w-0 items-center gap-2 text-sm text-graphite md:flex">
-        <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: a.professional_color }} />
-        <span className="truncate">{a.professional_name}</span>
-      </p>
-      <p className="hidden text-right text-sm tabular-nums md:block">{formatBRL(a.price_cents)}</p>
-      <div className="flex flex-col items-end gap-1 justify-self-end md:block md:justify-self-start">
-        <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
-        <span className="text-xs tabular-nums text-slate md:hidden">{formatBRL(a.price_cents)}</span>
-      </div>
-      {advance ? (
-        <div className="col-span-2 col-start-2 md:col-span-1 md:col-start-auto md:justify-self-end">
-          <button type="button" disabled={busy || waiting} onClick={() => onAdvance(a, advance)}
-            title={waiting ? 'Disponível após o horário de início' : undefined}
-            className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-3 text-[0.8125rem] font-medium transition-colors duration-150 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none ${
-              advance === 'confirmed' ? 'bg-ink text-white hover:bg-graphite' : 'border border-hairline bg-surface hover:border-slate/50'
-            }`}>
-            {busy && <Spinner className="size-3.5" />}{advance === 'confirmed' ? 'Confirmar' : 'Concluir'}
-          </button>
+        {live && (
+          <span aria-hidden="true" className="mt-2 block h-1 max-w-[14rem] overflow-hidden rounded-full bg-orbit/15">
+            <span className="block h-full rounded-full bg-orbit transition-[width] duration-700 motion-reduce:transition-none" style={{ width: `${elapsed}%` }} />
+          </span>
+        )}
+        {/* Empilhado: situação, valor e ação ficam logo abaixo */}
+        <div className={`mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-2 @[40rem]:hidden`}>
+          <span className={`inline-block rounded-md px-1.5 py-0.5 text-xs font-medium ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
+          <span className="text-[0.8125rem] font-medium tabular-nums">{formatBRL(a.price_cents)}</span>
+          {go && advance && <span className="ml-auto"><AdvanceButton advance={advance} busy={busy} waiting={waiting} onClick={go} /></span>}
         </div>
-      ) : <span className="hidden md:block" />}
+      </div>
+
+      <div className={`hidden flex-col items-end justify-center gap-1 @[40rem]:flex`}>
+        <span className="text-sm font-medium tabular-nums">{formatBRL(a.price_cents)}</span>
+        <span className={`inline-block rounded-md px-1.5 py-0.5 text-xs font-medium ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
+      </div>
+      <div className={`hidden items-center justify-end @[40rem]:flex`}>
+        {go && advance && <AdvanceButton advance={advance} busy={busy} waiting={waiting} onClick={go} />}
+      </div>
     </li>
   )
 }
 
 function AgendaSkeleton() {
   return (
-    <ul className="divide-y divide-hairline" role="status" aria-label="Carregando agenda de hoje">
-      {Array.from({ length: 5 }, (_, i) => (
-        <li key={i} className="flex items-center gap-4 px-4 py-3.5">
-          <span className="w-12 space-y-1.5"><span className={`${bar} h-4 w-11`} /><span className={`${bar} h-3 w-8`} /></span>
-          <span className="flex-1 space-y-1.5"><span className={`${bar} h-4 w-40 max-w-full`} /><span className={`${bar} h-3 w-56 max-w-full`} /></span>
-          <span className={`${bar} hidden h-5 w-20 md:block`} />
+    <ul className="px-3 py-2" role="status" aria-label="Carregando agenda de hoje">
+      {Array.from({ length: 4 }, (_, i) => (
+        <li key={i} className="grid grid-cols-[2.75rem_1.25rem_minmax(0,1fr)] gap-x-2 px-1 py-3">
+          <span className="space-y-1.5"><span className={`${bar} h-4 w-10`} /><span className={`${bar} h-3 w-7`} /></span>
+          <span className="mx-auto mt-1 size-3 rounded-full bg-paper" />
+          <span className="space-y-2"><span className={`${bar} h-4 w-40 max-w-full`} /><span className={`${bar} h-3 w-56 max-w-full`} /></span>
         </li>
       ))}
     </ul>
   )
 }
 
+function OrbitArt() {
+  return (
+    <svg viewBox="0 0 96 96" className="size-24" aria-hidden="true">
+      <circle cx="48" cy="48" r="45" fill="var(--color-orbit-soft)" />
+      <ellipse cx="48" cy="48" rx="30" ry="15" transform="rotate(-28 48 48)" fill="none" stroke="var(--color-orbit)" strokeWidth="2.5" />
+      <circle cx="48" cy="48" r="5.5" fill="var(--color-ink)" />
+      <circle cx="67.4" cy="29.2" r="6.5" fill="var(--color-orbit-glow)" />
+    </svg>
+  )
+}
+
+function EmptyAgenda({ title, children, actions }: { title: string; children: ReactNode; actions: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center px-5 pb-8 pt-9 text-center">
+      <OrbitArt />
+      <p className="mt-5 font-display text-lg font-semibold tracking-tight">{title}</p>
+      <div className="mt-1.5 max-w-sm text-sm leading-relaxed text-slate">{children}</div>
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">{actions}</div>
+      <ul aria-hidden="true" className="mt-8 w-full max-w-xs space-y-2 [mask-image:linear-gradient(to_bottom,#000,transparent)]">
+        {['09:00', '10:00', '11:00'].map((t) => (
+          <li key={t} className="flex items-center gap-3">
+            <span className="w-10 text-right text-xs tabular-nums text-slate">{t}</span>
+            <span className="flex h-9 flex-1 items-center rounded-lg border border-dashed border-hairline px-3 text-xs text-slate">Horário livre</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function Note({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="px-4 py-12 text-center">
-      <p className="text-sm font-semibold">{title}</p>
+    <div className="px-5 py-12 text-center">
+      <p className="font-display text-base font-semibold tracking-tight">{title}</p>
       <div className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-slate">{children}</div>
     </div>
   )
 }
 
-const textLink = 'font-medium text-orbit underline-offset-2 hover:underline'
+// ── Painel lateral ──────────────────────────────────────────────────────────────
+const tile = 'group flex flex-col items-start gap-2.5 rounded-lg border border-hairline bg-surface p-3 text-left text-[0.8125rem] font-medium transition-[background-color,border-color,transform] duration-150 hover:border-orbit/40 hover:bg-orbit-soft/40 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100'
+const tileIcon = 'size-4 text-slate transition-colors duration-150 group-hover:text-orbit motion-reduce:transition-none'
 
-// ── Linhas do painel lateral ─────────────────────────────────────────────────────
-const actionRow = 'flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors duration-150 hover:bg-paper/70 motion-reduce:transition-none'
+function Suggestion({ icon, title, hint, onClick, to }: { icon: IconName; title: string; hint: string; onClick?: () => void; to?: string }) {
+  const body = (
+    <>
+      <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-lg bg-amber-100 text-amber-800"><Icon name={icon} className="size-4" /></span>
+      <span className="min-w-0 flex-1 leading-tight">
+        <span className="block truncate text-sm font-medium">{title}</span>
+        <span className="block truncate text-xs text-slate">{hint}</span>
+      </span>
+      <Icon name="arrow" className="size-4 shrink-0 text-slate transition-transform duration-150 group-hover:translate-x-0.5 motion-reduce:transition-none" />
+    </>
+  )
+  const cls = 'group flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors duration-150 hover:bg-paper/80 motion-reduce:transition-none'
+  return to ? <Link to={to} className={cls}>{body}</Link> : <button type="button" onClick={onClick} className={cls}>{body}</button>
+}
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const { profile, current } = useAccount()
+  const { current } = useAccount()
   const est = current!.establishment
   const tz = est.timezone
   const { toast, notify } = useToast()
@@ -171,6 +273,8 @@ export default function DashboardPage() {
   const [now, setNow] = useState(() => new Date())
   const [busyId, setBusyId] = useState<string | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
+  const [copied, setCopied] = useState(false)
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setError(null)
@@ -184,6 +288,7 @@ export default function DashboardPage() {
     const t = setInterval(() => { setNow(new Date()); void load(true) }, 60_000)
     return () => clearInterval(t)
   }, [load])
+  useEffect(() => () => clearTimeout(copiedTimer.current), [])
 
   const retry = () => { setData(null); void load() }
   const publicPath = `/agendar/${est.slug}`
@@ -197,8 +302,13 @@ export default function DashboardPage() {
 
   async function copyBookingLink() {
     const url = `${window.location.origin}${publicPath}`
-    try { await navigator.clipboard.writeText(url); notify('Link de reserva copiado.') }
-    catch { notify(`Não foi possível copiar. Endereço: ${url}`, 'danger') }
+    try {
+      await navigator.clipboard.writeText(url)
+      notify('Link de reserva copiado.')
+      setCopied(true)
+      clearTimeout(copiedTimer.current)
+      copiedTimer.current = setTimeout(() => setCopied(false), 2000)
+    } catch { notify(`Não foi possível copiar. Endereço: ${url}`, 'danger') }
   }
 
   const stats = useMemo(() => {
@@ -216,78 +326,141 @@ export default function DashboardPage() {
 
   const base = useMemo(() => (data?.agenda ?? []).filter((r) => r.status !== 'cancelled'), [data])
   const rows = useMemo(() => base.filter((r) => matches(filter, r.status)), [base, filter])
-  const upcoming = useMemo(() => base.filter((r) => isActive(r.status) && new Date(r.ends_at) > now).slice(0, 4), [base, now])
+  const liveNow = useMemo(() => base.find((r) => isActive(r.status) && new Date(r.starts_at) <= now && now < new Date(r.ends_at)), [base, now])
+  const nextUp = useMemo(() => base.find((r) => isActive(r.status) && new Date(r.starts_at) > now), [base, now])
   const nowIndex = useMemo(() => {
     const i = rows.findIndex((r) => new Date(r.starts_at) > now)
     return i === -1 ? rows.length : i
   }, [rows, now])
+  const items = useMemo(() => {
+    const out: Array<{ kind: 'now' } | { kind: 'row'; a: AppointmentRow }> = rows.map((a) => ({ kind: 'row', a }))
+    out.splice(nowIndex, 0, { kind: 'now' })
+    return out
+  }, [rows, nowIndex])
+  const byPro = useMemo(() => {
+    const m = new Map<string, { name: string; color: string; expected: number }>()
+    for (const r of base) {
+      if (r.status === 'no_show') continue
+      const e = m.get(r.professional_id) ?? { name: r.professional_name, color: r.professional_color, expected: 0 }
+      e.expected += r.price_cents
+      m.set(r.professional_id, e)
+    }
+    return [...m.values()].sort((a, b) => b.expected - a.expected)
+  }, [base])
 
-  const firstName = (profile?.full_name ?? '').split(' ')[0] || 'por aqui'
   const loading = !data && !error
   const dash = (v: string) => (data ? v : '—')
   const clock = zoned(now.toISOString(), tz).time
   const pct = (n: number) => (stats.total ? `${(n / stats.total) * 100}%` : '0%')
   const toReceive = stats.expected - stats.revenue
-  const needsSetup = !!data && (data.counts.services === 0 || data.counts.professionals === 0)
+  const noServices = !!data && data.counts.services === 0
+  const noPros = !!data && data.counts.professionals === 0
+  const needsSetup = noServices || noPros
 
   const reviewPending = () => {
     setFilter('pending')
     document.getElementById('agenda-hoje')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })
   }
 
+  const steps = data ? [
+    { key: 'svc', todo: 'Cadastrar serviços', done: 'Serviços cadastrados', ok: data.counts.services > 0, n: data.counts.services, to: '/app/servicos' },
+    { key: 'pro', todo: 'Adicionar profissionais', done: 'Profissionais ativos', ok: data.counts.professionals > 0, n: data.counts.professionals, to: '/app/profissionais' },
+    { key: 'hrs', todo: 'Definir horários de atendimento', done: 'Horários definidos', ok: data.counts.workingHours > 0, n: data.counts.workingHours, to: '/app/horarios' },
+    { key: 'cus', todo: 'Cadastrar clientes', done: 'Clientes cadastrados', ok: data.counts.customers > 0, n: data.counts.customers, to: '/app/clientes' },
+  ] : []
+  const stepsDone = steps.filter((s) => s.ok).length
+  const allDone = steps.length > 0 && stepsDone === steps.length
+
+  const copyActions = (
+    <button type="button" onClick={() => void copyBookingLink()} className={pillOutline}>
+      <Icon name={copied ? 'check' : 'copy'} className="size-4" />{copied ? 'Link copiado' : 'Copiar link de reserva'}
+    </button>
+  )
+
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
-      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div className="min-w-0">
-          <p className="truncate text-xs text-slate">{est.name} <span aria-hidden="true" className="px-0.5 text-hairline">/</span> Visão geral</p>
-          <h1 className="mt-1 font-display text-xl font-semibold leading-tight tracking-tight first-letter:uppercase sm:text-2xl">{formatLongDate(now, tz)}</h1>
-          <p className="mt-0.5 text-sm text-slate">{greeting(now, tz)}, {firstName}</p>
+          <h1 className="font-display text-[1.75rem] font-semibold leading-none tracking-tight sm:text-[2rem]">Visão geral</h1>
+          <p className="mt-2.5 flex min-w-0 items-center gap-2 text-sm text-slate">
+            <span className="shrink-0 first-letter:uppercase">{formatLongDate(now, tz)}</span>
+            <span aria-hidden="true" className="size-[3px] shrink-0 rounded-full bg-slate/60" />
+            <span className="truncate">{est.name}</span>
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="hidden text-sm tabular-nums text-slate sm:inline" aria-label={`Hora atual ${clock}`}>{clock}</span>
-          <Link to="/app/agenda" className="inline-flex h-9 items-center gap-2 rounded-md bg-orbit px-3.5 text-sm font-medium text-white transition-colors duration-150 hover:bg-orbit-deep active:scale-[0.98] motion-reduce:transition-none">
-            <Icon name="plus" className="size-4" />Novo agendamento
-          </Link>
+        <div className="flex items-center gap-2.5">
+          <span className="hidden h-9 items-center gap-2 rounded-lg border border-hairline bg-surface px-3 text-sm font-medium tabular-nums sm:inline-flex" aria-label={`Hora atual ${clock}`}>
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-orbit" />{clock}
+          </span>
+          <Link to="/app/agenda" className={pillPrimary}><Icon name="plus" className="size-4" />Novo agendamento</Link>
         </div>
       </header>
 
-      <section aria-label="Indicadores de hoje" className="mt-5 grid grid-cols-2 overflow-hidden rounded-lg border border-hairline bg-surface lg:grid-cols-4">
-        <Stat label="Agendamentos hoje" loading={loading} value={dash(String(stats.total))} className="border-b border-r lg:border-b-0"
-          hint={stats.completed ? `${stats.completed} já concluído${stats.completed > 1 ? 's' : ''}` : 'Não inclui cancelados'}>
+      <section aria-label="Indicadores de hoje" className={`${card} mt-6 grid grid-cols-2 overflow-hidden lg:grid-cols-[1.35fr_1fr_1fr_1.35fr]`}>
+        <Kpi primary label="Atendimentos hoje" loading={loading} value={dash(String(stats.total))} className="border-b border-r lg:border-b-0"
+          hint={stats.total ? `${stats.completed} concluído${stats.completed === 1 ? '' : 's'} · ${stats.total - stats.completed} a fazer` : 'Não inclui cancelados'}>
           {data && stats.total > 0 && (
-            <div aria-hidden="true" className="mt-2.5 flex h-1 overflow-hidden rounded-full bg-hairline">
-              <span className="bg-ink" style={{ width: pct(stats.completed) }} />
-              <span className="bg-orbit" style={{ width: pct(stats.confirmed) }} />
-              <span className="bg-signal" style={{ width: pct(stats.pending) }} />
+            <div aria-hidden="true" className="mt-3.5 flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-hairline">
+              <span className="rounded-full bg-ok transition-[width] duration-500 motion-reduce:transition-none" style={{ width: pct(stats.completed) }} />
+              <span className="rounded-full bg-orbit transition-[width] duration-500 motion-reduce:transition-none" style={{ width: pct(stats.confirmed) }} />
+              <span className="rounded-full bg-signal transition-[width] duration-500 motion-reduce:transition-none" style={{ width: pct(stats.pending) }} />
             </div>
           )}
-        </Stat>
-        <Stat label="Confirmados" loading={loading} value={dash(String(stats.confirmed))} className="border-b lg:border-b-0 lg:border-r"
+        </Kpi>
+        <Kpi label="Confirmados" tone="bg-orbit" loading={loading} value={dash(String(stats.confirmed))} className="border-b lg:border-b-0 lg:border-r"
           hint={stats.total ? `de ${stats.total} no dia` : 'Nenhum no dia'} />
-        <Stat label="Pendentes" loading={loading} value={dash(String(stats.pending))} className="border-r"
-          hint={stats.pending ? <button type="button" onClick={reviewPending} className={textLink}>Revisar agora</button> : 'Nada a confirmar'} />
-        <Stat label="Faturamento" loading={loading} value={dash(formatBRL(stats.revenue))}
-          hint={`Previsto: ${formatBRL(stats.expected)}`} />
+        <Kpi label="Pendentes" tone="bg-signal" loading={loading} value={dash(String(stats.pending))} className="border-r"
+          hint={stats.pending ? <button type="button" onClick={reviewPending} className={`${textLink} inline-flex items-center gap-1`}>Revisar agora<Icon name="arrow" className="size-3" /></button> : 'Nada a confirmar'} />
+        <Kpi primary label="Faturamento" tone="bg-ok" loading={loading} value={dash(formatBRL(stats.revenue))}
+          hint={`de ${formatBRL(stats.expected)} previsto`}>
+          {data && (
+            <div aria-hidden="true" className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-hairline">
+              <span className="block h-full rounded-full bg-ok transition-[width] duration-500 motion-reduce:transition-none" style={{ width: stats.expected ? `${(stats.revenue / stats.expected) * 100}%` : '0%' }} />
+            </div>
+          )}
+        </Kpi>
       </section>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start">
-        <section id="agenda-hoje" aria-label="Agenda de hoje" className="min-w-0 scroll-mt-4 rounded-lg border border-hairline bg-surface">
-          <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-hairline px-4 py-3">
-            <div className="flex items-baseline gap-3">
-              <h2 className="text-sm font-semibold">Agenda de hoje</h2>
+      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_21rem]">
+        <section id="agenda-hoje" aria-label="Agenda de hoje" className={`${card} @container scroll-mt-4 xl:col-start-1`}>
+          <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-5 pb-3 pt-4">
+            <div className="flex flex-wrap items-baseline gap-x-3">
+              <h2 className="font-display text-lg font-semibold tracking-tight">Agenda de hoje</h2>
               {data && <span className="text-xs text-slate">{base.length} {base.length === 1 ? 'atendimento' : 'atendimentos'}{stats.cancelled ? ` · ${stats.cancelled} cancelado${stats.cancelled > 1 ? 's' : ''} oculto${stats.cancelled > 1 ? 's' : ''}` : ''}</span>}
             </div>
-            <Link to="/app/agenda" className={`${textLink} inline-flex items-center gap-1 text-sm`}>Abrir agenda<Icon name="arrow" className="size-3.5" /></Link>
+            <Link to="/app/agenda" className={`${textLink} group inline-flex items-center gap-1 text-sm`}>Abrir agenda<Icon name="arrow" className="size-3.5 transition-transform duration-150 group-hover:translate-x-0.5 motion-reduce:transition-none" /></Link>
           </header>
 
+          {data && (liveNow || nextUp) && (
+            <div className={`relative mx-4 mb-3 flex items-center gap-3 overflow-hidden rounded-lg border px-3.5 py-2.5 ${liveNow ? 'border-orbit/20 bg-orbit-soft' : 'border-hairline bg-paper/60'}`}>
+              {(() => {
+                const a = (liveNow ?? nextUp)!
+                const mins = Math.ceil((new Date(a.starts_at).getTime() - now.getTime()) / 60_000)
+                return (
+                  <>
+                    <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${liveNow ? 'animate-pulse bg-orbit motion-reduce:animate-none' : 'bg-signal'}`} />
+                    <div className="min-w-0 flex-1 leading-tight">
+                      <p className="truncate text-sm"><span className={`font-medium ${liveNow ? 'text-orbit' : ''}`}>{liveNow ? 'Em andamento' : 'Próximo'}</span><span className="text-slate"> · </span>{a.customer_name}</p>
+                      <p className="mt-0.5 truncate text-xs text-slate">{a.service_name} · {a.professional_name}</p>
+                    </div>
+                    <p className="shrink-0 text-right leading-tight">
+                      <span className="block font-display text-base font-semibold tabular-nums">{liveNow ? zoned(a.ends_at, tz).time : zoned(a.starts_at, tz).time}</span>
+                      <span className="block text-xs text-slate">{liveNow ? 'termina' : `em ${formatDuration(Math.max(mins, 1))}`}</span>
+                    </p>
+                  </>
+                )
+              })()}
+            </div>
+          )}
+
           {data && base.length > 0 && (
-            <div role="group" aria-label="Filtrar agenda" className="flex flex-wrap gap-1 border-b border-hairline px-3 py-2">
+            <div role="group" aria-label="Filtrar agenda" className="flex flex-wrap gap-1 px-4 pb-2">
               {FILTERS.map((f) => {
                 const n = f.key === 'all' ? base.length : f.key === 'pending' ? stats.pending : f.key === 'confirmed' ? stats.confirmed : stats.completed
                 return (
                   <button key={f.key} type="button" aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}
-                    className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[0.8125rem] font-medium transition-colors duration-150 motion-reduce:transition-none ${filter === f.key ? 'bg-ink text-white' : 'text-slate hover:bg-paper hover:text-ink'}`}>
-                    {f.label}<span className="tabular-nums opacity-60">{n}</span>
+                    className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-3 text-[0.8125rem] font-medium transition-colors duration-150 motion-reduce:transition-none ${filter === f.key ? 'bg-ink text-white' : 'text-slate hover:bg-paper hover:text-ink'}`}>
+                    {f.label}<span className={`tabular-nums ${filter === f.key ? 'text-white/70' : 'text-slate'}`}>{n}</span>
                   </button>
                 )
               })}
@@ -297,182 +470,169 @@ export default function DashboardPage() {
           {error ? (
             <Note title="Painel indisponível">
               <p>{error}</p>
-              <button type="button" onClick={retry} className="mt-4 inline-flex h-9 items-center gap-2 rounded-md border border-hairline bg-surface px-3.5 text-sm font-medium hover:border-slate/50">
-                <Icon name="refresh" className="size-4" />Tentar novamente
-              </button>
+              <button type="button" onClick={retry} className={`${pillOutline} mt-4`}><Icon name="refresh" className="size-4" />Tentar novamente</button>
             </Note>
           ) : !data ? (
             <AgendaSkeleton />
           ) : base.length === 0 ? (
             needsSetup ? (
-              <Note title="Falta pouco para receber reservas">
-                <p>Cadastre ao menos um <Link to="/app/servicos" className={textLink}>serviço</Link> e um <Link to="/app/profissionais" className={textLink}>profissional</Link> para começar a agendar.</p>
-              </Note>
+              <EmptyAgenda title="Falta pouco para receber reservas"
+                actions={<>
+                  {noServices && <Link to="/app/servicos" className={pillPrimary}>Cadastrar serviço</Link>}
+                  {noPros && <Link to="/app/profissionais" className={noServices ? pillOutline : pillPrimary}>Cadastrar profissional</Link>}
+                </>}>
+                <p>Cadastre ao menos um serviço e um profissional para começar a agendar.</p>
+              </EmptyAgenda>
             ) : (
-              <Note title="Agenda livre por enquanto">
-                <p>Nenhum atendimento hoje. <Link to="/app/agenda" className={textLink}>Agende um horário</Link> ou divulgue seu <button type="button" onClick={() => void copyBookingLink()} className={textLink}>link de reserva</button>.</p>
-              </Note>
+              <EmptyAgenda title="Agenda livre por enquanto"
+                actions={<><Link to="/app/agenda" className={pillPrimary}><Icon name="plus" className="size-4" />Novo agendamento</Link>{copyActions}</>}>
+                <p>Nenhum atendimento hoje. Crie um horário ou divulgue seu link para receber reservas online.</p>
+              </EmptyAgenda>
             )
           ) : rows.length === 0 ? (
             <Note title="Nenhum atendimento nesta situação">
               <button type="button" onClick={() => setFilter('all')} className={textLink}>Ver todos</button>
             </Note>
           ) : (
-            <>
-              <div aria-hidden="true" className={`hidden gap-x-3 border-b border-l-2 border-hairline border-l-transparent px-4 py-2 text-xs text-slate md:grid ${COLS}`}>
-                <span>Horário</span><span>Cliente e serviço</span><span>Profissional</span><span className="text-right">Valor</span><span>Situação</span><span />
-              </div>
-              <ul className="divide-y divide-hairline">
-                {rows.flatMap((a, i) => {
-                  const item = <AgendaRow key={a.id} a={a} tz={tz} now={now} busy={busyId === a.id} onAdvance={(row, s) => void advance(row, s)} />
-                  return i === nowIndex ? [<NowLine key="now" time={clock} />, item] : [item]
-                })}
-                {nowIndex === rows.length && <NowLine key="now" time={clock} />}
-              </ul>
-            </>
+            <ul className="px-3 pb-3 pt-1">
+              {items.map((it, i) => it.kind === 'now'
+                ? <NowRow key="now" time={clock} first={i === 0} last={i === items.length - 1} />
+                : <AgendaRow key={it.a.id} a={it.a} tz={tz} now={now} busy={busyId === it.a.id} first={i === 0} last={i === items.length - 1}
+                    onAdvance={(row, s) => void advance(row, s)} />)}
+            </ul>
           )}
         </section>
 
-        <div className="grid min-w-0 gap-4 md:grid-cols-2 md:items-start xl:grid-cols-1">
-          <Panel title="Próximos atendimentos" meta={data ? `${upcoming.length} de hoje` : undefined}>
-            {!data ? (
-              <div className="space-y-3 p-4" role="status" aria-label="Carregando próximos"><span className={`${bar} h-4 w-full`} /><span className={`${bar} h-4 w-5/6`} /><span className={`${bar} h-4 w-2/3`} /></div>
-            ) : upcoming.length === 0 ? (
-              <p className="px-4 py-5 text-sm text-slate">Nenhum atendimento pendente até o fim do dia.</p>
-            ) : (
-              <ul className="divide-y divide-hairline">
-                {upcoming.map((a) => {
-                  const mins = Math.ceil((new Date(a.starts_at).getTime() - now.getTime()) / 60_000)
-                  return (
-                    <li key={a.id} className="flex items-center gap-3 px-4 py-2.5">
-                      <span className="w-11 shrink-0 font-display text-[0.95rem] font-semibold tabular-nums">{zoned(a.starts_at, tz).time}</span>
-                      <span className="min-w-0 flex-1 leading-tight">
-                        <span className="block truncate text-sm font-medium">{a.customer_name}</span>
-                        <span className="block truncate text-xs text-slate">{a.service_name} · {a.professional_name}</span>
-                      </span>
-                      <span className={`shrink-0 text-xs tabular-nums ${mins <= 0 ? 'font-medium text-orbit' : 'text-slate'}`}>{mins <= 0 ? 'agora' : `em ${formatDuration(mins)}`}</span>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </Panel>
-
-          <Panel title="Financeiro do dia">
-            {!data ? (
-              <div className="space-y-3 p-4" role="status" aria-label="Carregando financeiro"><span className={`${bar} h-8 w-32`} /><span className={`${bar} h-1.5 w-full`} /><span className={`${bar} h-4 w-full`} /></div>
-            ) : (
-              <div className="px-4 py-4">
-                <p className="text-xs text-slate">Realizado</p>
-                <p className="mt-1 font-display text-[1.75rem] font-semibold leading-none tracking-tight tabular-nums">{formatBRL(stats.revenue)}</p>
-                <div aria-hidden="true" className="mt-3 h-1.5 overflow-hidden rounded-full bg-hairline">
-                  <span className="block h-full bg-ink transition-[width] duration-500 motion-reduce:transition-none" style={{ width: stats.expected ? `${(stats.revenue / stats.expected) * 100}%` : '0%' }} />
+        <div className="grid min-w-0 content-start gap-4 md:grid-cols-2 md:items-start xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:grid-cols-1">
+          <Panel title="Ações">
+            <div className="px-3 pb-3 pt-1">
+              {data && (stats.pending > 0 || (!needsSetup && base.length === 0)) && (
+                <div className="mb-2 border-b border-hairline pb-2">
+                  {stats.pending > 0 && <Suggestion icon="check" title="Confirmar pendentes" hint={`${stats.pending} aguardando confirmação`} onClick={reviewPending} />}
+                  {!needsSetup && base.length === 0 && <Suggestion icon="link" title="Divulgar link de reserva" hint="Agenda livre hoje" onClick={() => void copyBookingLink()} />}
                 </div>
-                <dl className="mt-3 divide-y divide-hairline text-sm">
-                  {([
-                    ['A receber', formatBRL(toReceive)],
-                    ['Previsto no dia', formatBRL(stats.expected)],
-                    ['Ticket médio previsto', formatBRL(stats.total ? Math.round(stats.expected / stats.total) : 0)],
-                  ] as const).map(([k, v]) => (
-                    <div key={k} className="flex items-center justify-between py-2"><dt className="text-slate">{k}</dt><dd className="font-medium tabular-nums">{v}</dd></div>
-                  ))}
-                </dl>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => void copyBookingLink()} title={publicPath} className={tile}>
+                  <Icon name={copied ? 'check' : 'copy'} className={copied ? 'size-4 text-ok' : tileIcon} />{copied ? 'Link copiado' : 'Copiar link'}
+                </button>
+                <a href={publicPath} target="_blank" rel="noopener noreferrer" className={tile}>
+                  <Icon name="external" className={tileIcon} />Página pública
+                </a>
+                <Link to="/app/horarios" className={tile}><Icon name="clock" className={tileIcon} />Bloquear horário</Link>
+                <Link to="/app/clientes" className={tile}><Icon name="users" className={tileIcon} />Novo cliente</Link>
+              </div>
+            </div>
+          </Panel>
+
+          <Panel title="Financeiro">
+            {!data ? (
+              <div className="space-y-3 p-5" role="status" aria-label="Carregando financeiro"><span className={`${bar} h-8 w-32`} /><span className={`${bar} h-4 w-full`} /><span className={`${bar} h-4 w-full`} /></div>
+            ) : (
+              <div className="px-5 pb-5 pt-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="min-w-0">
+                    <p className="text-xs text-slate">A receber</p>
+                    <p className="mt-1.5 truncate font-display text-[1.625rem] font-semibold leading-none tracking-tight tabular-nums">{formatBRL(toReceive)}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-slate">Ticket médio</p>
+                    <p className="mt-1.5 truncate font-display text-[1.625rem] font-semibold leading-none tracking-tight tabular-nums">{formatBRL(stats.total ? Math.round(stats.expected / stats.total) : 0)}</p>
+                  </div>
+                </div>
+                <div className="mt-5 border-t border-hairline pt-4">
+                  <p className="text-xs text-slate">Por profissional</p>
+                  {byPro.length === 0 ? (
+                    <p className="mt-2 text-sm text-slate">Sem valores previstos hoje.</p>
+                  ) : (
+                    <ul className="mt-3 space-y-3">
+                      {byPro.map((p) => (
+                        <li key={p.name}>
+                          <div className="flex items-baseline justify-between gap-3 text-sm">
+                            <span className="min-w-0 truncate">{p.name}</span>
+                            <span className="shrink-0 font-medium tabular-nums">{formatBRL(p.expected)}</span>
+                          </div>
+                          <div aria-hidden="true" className="mt-1.5 h-1 overflow-hidden rounded-full bg-hairline">
+                            <span className="block h-full rounded-full transition-[width] duration-500 motion-reduce:transition-none" style={{ width: stats.expected ? `${(p.expected / stats.expected) * 100}%` : '0%', backgroundColor: p.color }} />
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+          </Panel>
+        </div>
+
+        <div className="grid min-w-0 content-start gap-4 md:grid-cols-2 md:items-start xl:col-start-1">
+          <Panel title="Ativação" meta={data ? (allDone ? <span className="font-medium text-ok">Completa</span> : `${stepsDone} de ${steps.length}`) : undefined}>
+            {!data ? (
+              <div className="space-y-3 p-5" role="status" aria-label="Carregando ativação">{Array.from({ length: 4 }, (_, i) => <span key={i} className={`${bar} h-4 w-full`} />)}</div>
+            ) : (
+              <div className="px-5 pb-4 pt-2">
+                <div aria-hidden="true" className="flex gap-1">
+                  {steps.map((s) => <span key={s.key} className={`h-1 flex-1 rounded-full transition-colors duration-300 motion-reduce:transition-none ${s.ok ? 'bg-ok' : 'bg-hairline'}`} />)}
+                </div>
+                {allDone ? (
+                  <details className="group mt-3 text-sm">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded text-slate [&::-webkit-details-marker]:hidden">
+                      <span>Tudo pronto para receber reservas.</span>
+                      <span className="text-xs font-medium text-orbit group-open:hidden">Ver detalhes</span>
+                    </summary>
+                    <ol className="mt-2 divide-y divide-hairline">
+                      {steps.map((s) => (
+                        <li key={s.key} className="flex items-center justify-between gap-3 py-2 text-slate"><span>{s.done}</span><span className="font-medium tabular-nums text-ink">{s.n}</span></li>
+                      ))}
+                    </ol>
+                  </details>
+                ) : (
+                  <ol className="mt-2 divide-y divide-hairline text-sm">
+                    {steps.map((s) => s.ok ? (
+                      <li key={s.key} className="flex items-center gap-2.5 py-2 text-slate">
+                        <span aria-hidden="true" className="grid size-4 shrink-0 place-items-center rounded-full bg-ok text-white"><Icon name="check" className="size-2.5" /></span>
+                        <span className="min-w-0 flex-1 truncate">{s.done}</span><span className="font-medium tabular-nums text-ink">{s.n}</span>
+                      </li>
+                    ) : (
+                      <li key={s.key}>
+                        <Link to={s.to} className="group flex items-center gap-2.5 py-2 font-medium transition-colors duration-150 hover:text-orbit motion-reduce:transition-none">
+                          <span aria-hidden="true" className="size-4 shrink-0 rounded-full border-[1.5px] border-slate/50" />
+                          <span className="min-w-0 flex-1 truncate">{s.todo}</span>
+                          <Icon name="arrow" className="size-3.5 shrink-0 text-slate transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-orbit motion-reduce:transition-none" />
+                        </Link>
+                      </li>
+                    ))}
+                  </ol>
+                )}
               </div>
             )}
           </Panel>
 
-          <div className="md:col-span-2 xl:col-span-1">
-            <Panel title="Ações">
-              <div className="divide-y divide-hairline">
-                {stats.pending > 0 && (
-                  <button type="button" onClick={reviewPending} className={actionRow}>
-                    <span>Revisar pendentes</span>
-                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium tabular-nums text-amber-800">{stats.pending}</span>
-                  </button>
-                )}
-                <button type="button" onClick={() => void copyBookingLink()} className={actionRow}>
-                  <span className="min-w-0"><span className="block">Copiar link de reserva</span><span className="block truncate text-xs text-slate">{publicPath}</span></span>
-                  <Icon name="copy" className="size-4 shrink-0 text-slate" />
-                </button>
-                <a href={publicPath} target="_blank" rel="noopener noreferrer" className={actionRow}>
-                  <span>Abrir página pública</span><Icon name="external" className="size-4 shrink-0 text-slate" />
-                </a>
-                <Link to="/app/horarios" className={actionRow}><span>Bloquear horário ou folga</span><Icon name="arrow" className="size-4 shrink-0 text-slate" /></Link>
-                <Link to="/app/clientes" className={actionRow}><span>Cadastrar cliente</span><Icon name="arrow" className="size-4 shrink-0 text-slate" /></Link>
-              </div>
-            </Panel>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-4 md:grid-cols-2 md:items-start xl:grid-cols-3">
-        <Panel title="Linha do dia">
-          <div className="p-4">
-            {data ? (
-              <div className="mx-auto max-w-[16rem]"><DayOrbit appointments={data.today} timezone={tz} now={now} /></div>
-            ) : (
-              <div className="mx-auto grid aspect-square w-full max-w-[16rem] place-items-center" role="status" aria-label="Carregando linha do dia">
-                <span className="size-full animate-pulse rounded-full border-[10px] border-paper motion-reduce:animate-none" />
-              </div>
-            )}
-            <p className="mt-3 text-center text-xs text-slate">Cada arco é um atendimento; o ponto marca a hora atual.</p>
-          </div>
-        </Panel>
-
-        <Panel title="Configuração da casa">
-          {!data ? (
-            <div className="space-y-3 p-4" role="status" aria-label="Carregando configuração">{Array.from({ length: 4 }, (_, i) => <span key={i} className={`${bar} h-4 w-full`} />)}</div>
-          ) : (
-            <>
-              <dl className="divide-y divide-hairline px-4 text-sm">
-                {([
-                  ['Profissionais ativos', data.counts.professionals],
-                  ['Serviços ativos', data.counts.services],
-                  ['Clientes cadastrados', data.counts.customers],
-                  ['Horários de atendimento', data.counts.workingHours],
-                ] as const).map(([label, n]) => (
-                  <div key={label} className="flex items-center justify-between gap-3 py-2.5">
-                    <dt className="text-graphite">{label}</dt>
-                    <dd className="flex items-center gap-2.5">
-                      <span className="font-display font-semibold tabular-nums">{n}</span>
-                      <span className={`inline-flex w-16 items-center gap-1.5 text-xs ${n > 0 ? 'text-ok' : 'text-slate'}`}>
-                        <span aria-hidden="true" className={`size-1.5 rounded-full ${n > 0 ? 'bg-ok' : 'border border-slate/60'}`} />{n > 0 ? 'Pronto' : 'Pendente'}
-                      </span>
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              {data.counts.professionals + data.counts.services === 0 && (
-                <p className="border-t border-hairline px-4 py-3 text-sm leading-relaxed text-slate">
-                  Comece cadastrando seus <Link to="/app/servicos" className={textLink}>serviços</Link> e <Link to="/app/profissionais" className={textLink}>profissionais</Link>.
-                </p>
-              )}
-            </>
-          )}
-        </Panel>
-
-        <div className="md:col-span-2 xl:col-span-1">
-          <Panel title="Equipe com acesso">
+          <Panel title="Equipe">
             {!data ? (
-              <div className="space-y-3 p-4" role="status" aria-label="Carregando equipe">{Array.from({ length: 2 }, (_, i) => <span key={i} className={`${bar} h-8 w-full`} />)}</div>
-            ) : data.team.length === 0 ? (
-              <p className="px-4 py-5 text-sm text-slate">Os vínculos da sua equipe aparecem nesta lista.</p>
+              <div className="space-y-3 p-5" role="status" aria-label="Carregando equipe">{Array.from({ length: 2 }, (_, i) => <span key={i} className={`${bar} h-8 w-full`} />)}</div>
             ) : (
-              <ul className="divide-y divide-hairline">
-                {data.team.map((m) => (
-                  <li key={m.membershipId} className="flex items-center gap-3 px-4 py-2.5">
-                    <span className="grid size-8 shrink-0 place-items-center rounded-md bg-paper text-xs font-semibold text-graphite">{initials(m.name)}</span>
-                    <div className="min-w-0 flex-1 leading-tight">
-                      <p className="truncate text-sm font-medium">{m.name}{m.userId === user?.id ? ' (você)' : ''}</p>
-                      <p className="text-xs text-slate">{roleLabel[m.role]}{m.isActive ? '' : ' (inativo)'}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <>
+                {data.team.length === 0 ? (
+                  <p className="px-5 py-4 text-sm text-slate">Os vínculos da sua equipe aparecem nesta lista.</p>
+                ) : (
+                  <ul className="px-5 pt-1">
+                    {data.team.map((m) => (
+                      <li key={m.membershipId} className="flex items-center gap-3 py-2">
+                        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-paper text-xs font-semibold text-graphite">{initials(m.name)}</span>
+                        <div className="min-w-0 flex-1 leading-tight">
+                          <p className="truncate text-sm font-medium">{m.name}{m.userId === user?.id ? ' (você)' : ''}</p>
+                          <p className="text-xs text-slate">{roleLabel[m.role]}{m.isActive ? '' : ' (inativo)'}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="px-5 pb-4 pt-2">
+                  <button type="button" disabled title="Convites chegam na próxima etapa" className={`${pillOutline} h-8 text-[0.8125rem] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-hairline`}>Convidar funcionário</button>
+                </div>
+              </>
             )}
-            <div className="border-t border-hairline px-4 py-3">
-              <button type="button" disabled title="Convites chegam na próxima etapa" className="inline-flex h-8 items-center rounded-md border border-hairline px-3 text-[0.8125rem] font-medium disabled:cursor-not-allowed disabled:opacity-60">Convidar funcionário</button>
-            </div>
           </Panel>
         </div>
       </div>
