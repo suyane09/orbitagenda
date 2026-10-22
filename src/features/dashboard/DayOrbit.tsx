@@ -25,13 +25,13 @@ export function DayOrbit({ appointments, timezone, now }: { appointments: TodayA
   const label = appointments.length === 1 ? 'atendimento hoje' : 'atendimentos hoje'
 
   return (
-    <div className="relative mx-auto aspect-square w-full max-w-[22rem]">
+    <div className="@container relative mx-auto aspect-square w-full max-w-[22rem]">
       <svg viewBox="0 0 360 360" className="size-full" role="img"
         aria-label={`Linha do dia: ${appointments.length} ${label}. Agora são ${hm(now, timezone)}.`}>
         <circle cx={C} cy={C} r={R} fill="none" stroke="var(--color-hairline)" strokeWidth={W} />
         {[0, 360, 720, 1080].map((m) => {
           const o = point(m, R + 22)
-          return <text key={m} x={o.x} y={o.y} textAnchor="middle" dominantBaseline="central" className="fill-slate text-[11px]">{String(m / 60).padStart(2, '0')}h</text>
+          return <text key={m} x={o.x} y={o.y} textAnchor="middle" dominantBaseline="central" className="fill-slate text-[14px] font-medium">{String(m / 60).padStart(2, '0')}h</text>
         })}
         {appointments.map((a) => {
           const s = minutesOfDay(new Date(a.starts_at), timezone)
@@ -41,10 +41,10 @@ export function DayOrbit({ appointments, timezone, now }: { appointments: TodayA
         <circle cx={dot.x} cy={dot.y} r="13" fill="var(--color-orbit-glow)" fillOpacity=".25" />
         <circle cx={dot.x} cy={dot.y} r="7" fill="#fff" stroke="var(--color-ink)" strokeWidth="2.5" />
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <span className="font-display text-6xl font-semibold leading-none tracking-tight">{appointments.length}</span>
-        <span className="mt-2 text-sm text-slate">{label}</span>
-        <span className="mt-3 max-w-[9rem] text-xs leading-snug text-slate">
+      <div className="absolute inset-0 flex flex-col items-center justify-center px-[18cqw] text-center">
+        <span className="font-display text-[22cqw] font-semibold leading-none tracking-tight">{appointments.length}</span>
+        <span className="mt-[2cqw] text-[6cqw] leading-tight text-slate">{label}</span>
+        <span className="mt-[2.5cqw] text-[5.2cqw] leading-snug text-slate">
           {next ? `Próximo às ${hm(new Date(next.starts_at), timezone)}` : appointments.length ? 'Sem mais horários hoje' : 'Agenda livre por enquanto'}
         </span>
       </div>

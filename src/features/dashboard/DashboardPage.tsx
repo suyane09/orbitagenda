@@ -104,7 +104,7 @@ function AgendaRow({ a, tz, now, busy, onAdvance }: {
           )}
         </div>
         <p className="truncate text-[0.8125rem] text-slate">
-          <span className="md:hidden">{a.service_name} · {a.professional_name} · {formatBRL(a.price_cents)}</span>
+          <span className="md:hidden">{a.service_name} · {a.professional_name}</span>
           <span className="hidden md:inline">{a.service_name} · {formatDuration(minutes)}{a.customer_phone ? ` · ${a.customer_phone}` : ''}</span>
         </p>
       </div>
@@ -113,8 +113,9 @@ function AgendaRow({ a, tz, now, busy, onAdvance }: {
         <span className="truncate">{a.professional_name}</span>
       </p>
       <p className="hidden text-right text-sm tabular-nums md:block">{formatBRL(a.price_cents)}</p>
-      <div className="justify-self-end md:justify-self-start">
+      <div className="flex flex-col items-end gap-1 justify-self-end md:block md:justify-self-start">
         <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
+        <span className="text-xs tabular-nums text-slate md:hidden">{formatBRL(a.price_cents)}</span>
       </div>
       {advance ? (
         <div className="col-span-2 col-start-2 md:col-span-1 md:col-start-auto md:justify-self-end">
@@ -280,7 +281,7 @@ export default function DashboardPage() {
           </header>
 
           {data && base.length > 0 && (
-            <div role="group" aria-label="Filtrar agenda" className="flex gap-1 overflow-x-auto border-b border-hairline px-3 py-2">
+            <div role="group" aria-label="Filtrar agenda" className="flex flex-wrap gap-1 border-b border-hairline px-3 py-2">
               {FILTERS.map((f) => {
                 const n = f.key === 'all' ? base.length : f.key === 'pending' ? stats.pending : f.key === 'confirmed' ? stats.confirmed : stats.completed
                 return (
@@ -332,7 +333,7 @@ export default function DashboardPage() {
           )}
         </section>
 
-        <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-1">
+        <div className="grid min-w-0 gap-4 md:grid-cols-2 md:items-start xl:grid-cols-1">
           <Panel title="Próximos atendimentos" meta={data ? `${upcoming.length} de hoje` : undefined}>
             {!data ? (
               <div className="space-y-3 p-4" role="status" aria-label="Carregando próximos"><span className={`${bar} h-4 w-full`} /><span className={`${bar} h-4 w-5/6`} /><span className={`${bar} h-4 w-2/3`} /></div>
@@ -404,13 +405,13 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-4 grid gap-4 md:grid-cols-2 md:items-start xl:grid-cols-3">
         <Panel title="Linha do dia">
           <div className="p-4">
             {data ? (
-              <div className="mx-auto max-w-[14rem]"><DayOrbit appointments={data.today} timezone={tz} now={now} /></div>
+              <div className="mx-auto max-w-[16rem]"><DayOrbit appointments={data.today} timezone={tz} now={now} /></div>
             ) : (
-              <div className="mx-auto grid aspect-square w-full max-w-[14rem] place-items-center" role="status" aria-label="Carregando linha do dia">
+              <div className="mx-auto grid aspect-square w-full max-w-[16rem] place-items-center" role="status" aria-label="Carregando linha do dia">
                 <span className="size-full animate-pulse rounded-full border-[10px] border-paper motion-reduce:animate-none" />
               </div>
             )}
