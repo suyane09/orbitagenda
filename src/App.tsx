@@ -20,6 +20,7 @@ const ProfessionalsPage = lazy(() => import('@/features/professionals/Profession
 const CustomersPage = lazy(() => import('@/features/customers/CustomersPage'))
 const AgendaPage = lazy(() => import('@/features/appointments/AgendaPage'))
 const SchedulePage = lazy(() => import('@/features/schedule/SchedulePage'))
+const PublicBookingPage = lazy(() => import('@/features/public-booking/PublicBookingPage'))
 
 function NotFound() {
   return <ErrorState title="Página não encontrada" message="O endereço não existe ou foi movido." action={<Link to="/app" className="inline-flex h-11 items-center rounded-control border border-hairline px-5 text-sm font-medium">Ir ao painel</Link>} />
@@ -58,7 +59,7 @@ export default function App() {
                   </Route>
                 </Route>
               </Route>
-
+<Route path="/agendar/:slug" element={<PublicBookingPage />} />
               <Route path="/" element={<Navigate to="/app" replace />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
