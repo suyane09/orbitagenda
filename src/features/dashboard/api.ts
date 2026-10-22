@@ -1,9 +1,13 @@
 import { supabase } from '@/lib/supabase'
-import { dayBounds } from '@/lib/time'
+import { todayInZone } from '@/lib/schedule'
+import { listAppointments, type AppointmentRow } from '@/features/appointments/api'
 import type { MembershipRole, TeamMember, TodayAppointment } from '@/types/models'
 
 export interface DashboardData {
   counts: { professionals: number; services: number; customers: number; workingHours: number }
+  /** Todos os agendamentos de hoje (fuso do estabelecimento), inclusive cancelados e faltas. */
+  agenda: AppointmentRow[]
+  /** Agendados, confirmados e concluídos de hoje: alimenta a órbita do dia. */
   today: TodayAppointment[]
   team: TeamMember[]
 }
@@ -19,23 +23,19 @@ async function count(table: string, establishmentId: string, activeOnly = false)
 /**
  * Os filtros por establishment_id aqui servem só para delimitar a consulta;
  * a garantia de isolamento é do RLS, não deste parâmetro.
+ * A agenda de hoje vem da mesma RPC (list_appointments) usada pela página Agenda.
  */
 export async function loadDashboard(establishmentId: string, timezone: string): Promise<DashboardData> {
-  const { start, end } = dayBounds(new Date(), timezone)
+  const today = todayInZone(new Date(), timezone)
 
-  const [professionals, services, customers, workingHours, appts, members] = await Promise.all([
+  const [professionals, services, customers, workingHours, agenda, members] = await Promise.all([
     count('professionals', establishmentId, true),
     count('services', establishmentId, true),
     count('customers', establishmentId),
     count('working_hours', establishmentId),
-    supabase.from('appointments').select('id, starts_at, ends_at, status')
-      .eq('establishment_id', establishmentId)
-      .gte('starts_at', start.toISOString()).lt('starts_at', end.toISOString())
-      .in('status', ['scheduled', 'confirmed', 'completed'])
-      .order('starts_at', { ascending: true }),
+    listAppointments(establishmentId, today, today),
     supabase.from('memberships').select('id, user_id, role, is_active').eq('establishment_id', establishmentId).order('created_at', { ascending: true }),
   ])
-  if (appts.error) throw appts.error
   if (members.error) throw members.error
 
   const rows = (members.data ?? []) as Array<{ id: string; user_id: string; role: MembershipRole; is_active: boolean }>
@@ -49,7 +49,10 @@ export async function loadDashboard(establishmentId: string, timezone: string): 
 
   return {
     counts: { professionals, services, customers, workingHours },
-    today: (appts.data ?? []) as TodayAppointment[],
+    agenda,
+    today: agenda
+      .filter((a) => a.status === 'scheduled' || a.status === 'confirmed' || a.status === 'completed')
+      .map((a) => ({ id: a.id, starts_at: a.starts_at, ends_at: a.ends_at, status: a.status })),
     team: rows.map((r) => ({ membershipId: r.id, userId: r.user_id, name: names.get(r.user_id) ?? 'Usuário', role: r.role, isActive: r.is_active })),
   }
 }
