@@ -59,7 +59,7 @@ export default function App() {
                   </Route>
                 </Route>
               </Route>
-<Route path="/agendar/:slug" element={<PublicBookingPage />} />
+              <Route path="/agendar/:slug" element={<PublicBookingPage />} />
               <Route path="/" element={<Navigate to="/app" replace />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
