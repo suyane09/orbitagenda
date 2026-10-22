@@ -18,6 +18,7 @@ const PlatformPage = lazy(() => import('@/features/platform/PlatformPage'))
 const ServicesPage = lazy(() => import('@/features/services/ServicesPage'))
 const ProfessionalsPage = lazy(() => import('@/features/professionals/ProfessionalsPage'))
 const CustomersPage = lazy(() => import('@/features/customers/CustomersPage'))
+const AgendaPage = lazy(() => import('@/features/appointments/AgendaPage'))
 const SchedulePage = lazy(() => import('@/features/schedule/SchedulePage'))
 
 function NotFound() {
@@ -49,6 +50,7 @@ export default function App() {
                     <Route path="/app/servicos" element={<ServicesPage />} />
                     <Route path="/app/profissionais" element={<ProfessionalsPage />} />
                     <Route path="/app/clientes" element={<CustomersPage />} />
+                    <Route path="/app/agenda" element={<AgendaPage />} />
                     <Route path="/app/horarios" element={<SchedulePage />} />
                   </Route>
                   <Route element={<RequireSuperadmin />}>

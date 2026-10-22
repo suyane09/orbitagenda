@@ -188,6 +188,7 @@ reset role;
 \warn '== Conflito com agendamentos =='
 insert into public.services (establishment_id, name, duration_minutes, price_cents) values (current_setting('tests.est_a')::uuid, 'Corte', 30, 4500);
 insert into public.customers (establishment_id, full_name) values (current_setting('tests.est_a')::uuid, 'Cliente');
+set session_replication_role = replica;  -- fixture: agendamentos sem expediente/vínculo, sem passar pelas regras de agenda
 -- agendamento de Pedro em d2 às 09:00 local (13:00Z) e de João cancelado no mesmo horário
 insert into public.appointments (establishment_id, professional_id, service_id, customer_id, starts_at, ends_at, price_cents, status)
 select current_setting('tests.est_a')::uuid, current_setting('tests.pedro')::uuid, s.id, c.id,
@@ -199,6 +200,7 @@ select current_setting('tests.est_a')::uuid, current_setting('tests.joao')::uuid
        (current_setting('tests.d2')::date + time '09:00') at time zone 'America/Manaus',
        (current_setting('tests.d2')::date + time '09:30') at time zone 'America/Manaus', 4500, 'cancelled'
   from public.services s, public.customers c;
+set session_replication_role = origin;
 
 select tests.login_as(current_setting('tests.o_a')::uuid);
 select tests.expect_error($$select public.save_schedule_block(current_setting('tests.est_a')::uuid, null, current_setting('tests.pedro')::uuid, 'block',

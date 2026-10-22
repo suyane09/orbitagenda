@@ -169,9 +169,15 @@ insert into public.customers (id, establishment_id, full_name) values
 insert into public.working_hours (establishment_id, professional_id, weekday, start_time, end_time) values
   (current_setting('tests.est_a')::uuid, 'c0000000-0000-0000-0000-00000000000a', 1, '09:00', '18:00'),
   (current_setting('tests.est_b')::uuid, 'c0000000-0000-0000-0000-00000000000b', 1, '09:00', '18:00');
+-- Expediente amplo (demais dias) e vínculo: os INSERTs diretos autenticados mais abaixo passam pelas regras do trigger 0010.
+insert into public.working_hours (establishment_id, professional_id, weekday, start_time, end_time)
+select current_setting('tests.est_a')::uuid, 'c0000000-0000-0000-0000-00000000000a', wd, '00:00', '23:59' from generate_series(0, 6) wd where wd <> 1;
+insert into public.professional_services (establishment_id, professional_id, service_id) values
+  (current_setting('tests.est_a')::uuid, 'c0000000-0000-0000-0000-00000000000a', 'c1000000-0000-0000-0000-00000000000a');
 insert into public.schedule_blocks (establishment_id, starts_at, ends_at, reason) values
   (current_setting('tests.est_a')::uuid, '2030-01-01 12:00+00', '2030-01-01 13:00+00', 'Almoço A'),
   (current_setting('tests.est_b')::uuid, '2030-01-01 12:00+00', '2030-01-01 13:00+00', 'Almoço B');
+set session_replication_role = replica;  -- fixture (dados históricos de duas empresas), sem passar pelas regras de agenda
 insert into public.appointments (id, establishment_id, professional_id, service_id, customer_id, starts_at, ends_at, price_cents) values
   ('c3000000-0000-0000-0000-00000000000a', current_setting('tests.est_a')::uuid,
    'c0000000-0000-0000-0000-00000000000a', 'c1000000-0000-0000-0000-00000000000a',
@@ -179,6 +185,7 @@ insert into public.appointments (id, establishment_id, professional_id, service_
   ('c3000000-0000-0000-0000-00000000000b', current_setting('tests.est_b')::uuid,
    'c0000000-0000-0000-0000-00000000000b', 'c1000000-0000-0000-0000-00000000000b',
    'c2000000-0000-0000-0000-00000000000b', '2030-01-01 10:00+00', '2030-01-01 10:30+00', 6000);
+set session_replication_role = origin;
 
 \warn '== 2. Proprietário A não enxerga nem altera a empresa B =='
 select tests.login_as(current_setting('tests.a1')::uuid);

@@ -98,9 +98,13 @@ reset role;
 select tests.login_as(current_setting('tests.o_a')::uuid);
 select public.save_professional(current_setting('tests.est_a')::uuid, null, 'João', null, null, true, '{}');
 insert into public.services (establishment_id, name, duration_minutes, price_cents) values (current_setting('tests.est_a')::uuid, 'Corte', 30, 4500);
+reset role;
+set session_replication_role = replica;  -- fixture de histórico, sem passar pelas regras de agenda
 insert into public.appointments (establishment_id, professional_id, service_id, customer_id, starts_at, ends_at, price_cents)
 select current_setting('tests.est_a')::uuid, p.id, s.id, c.id, now() + interval '2 days', now() + interval '2 days 30 minutes', 4500
   from public.professionals p, public.services s, public.customers c where c.full_name = 'Bruno';
+set session_replication_role = origin;
+select tests.login_as(current_setting('tests.o_a')::uuid);
 select tests.expect_error($$delete from public.customers where full_name = 'Bruno'$$, '23503', 'cliente com agendamento não pode ser excluído');
 select tests.expect_affected($$delete from public.customers where full_name = 'Sem contato 1'$$, 1, 'owner exclui cliente sem histórico');
 reset role;

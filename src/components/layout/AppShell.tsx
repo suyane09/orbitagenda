@@ -6,7 +6,7 @@ import { useAccount } from '@/features/establishments/AccountProvider'
 import { roleLabel } from '@/lib/labels'
 
 const items: Array<{ label: string; to?: string }> = [
-  { label: 'Agenda' },
+  { label: 'Agenda', to: '/app/agenda' },
   { label: 'Clientes', to: '/app/clientes' },
   { label: 'Serviços', to: '/app/servicos' },
   { label: 'Profissionais', to: '/app/profissionais' },
