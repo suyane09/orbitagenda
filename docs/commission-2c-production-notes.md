@@ -44,3 +44,12 @@ estornos podem reduzir a comissão apurada.
 
 **Repasses aos profissionais não estão implementados** e não devem ser
 inferidos do valor acumulado na tela.
+
+## Etapa 3 — repasses (atualização)
+
+- A migração `commission_payouts_stage3` foi aplicada à produção com sucesso pelo conector Supabase.
+- Foram confirmados `public.commission_payouts` com RLS habilitado, política de leitura do proprietário e `public.record_commission_payout` executável somente por autenticados.
+- O histórico de repasses estava inicialmente vazio. **Nenhum repasse de cliente foi registrado** durante essa implementação.
+- A tela permite lançar manualmente pagamentos já feitos aos profissionais e consulta o histórico; a operação não faz transferências bancárias nem afeta `financial_entries` ou o caixa.
+- Testes de migração e regras foram aprovados em PostgreSQL descartável no GitHub Actions.
+- Resta observar um atendimento real novo completado após a 2C para confirmar a captura ponta a ponta no ambiente de produção, sem inserir dados fictícios.
