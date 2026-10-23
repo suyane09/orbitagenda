@@ -4,7 +4,8 @@ alter table public.establishment_subscriptions
   add column asaas_customer_id text,
   add column asaas_subscription_id text,
   add column asaas_environment text check (asaas_environment in ('sandbox','production')),
-  add column asaas_synced_at timestamptz;
+  add column asaas_synced_at timestamptz,
+  add column asaas_provisioning_started_at timestamptz;
 create unique index establishment_subscriptions_asaas_subscription_unique
   on public.establishment_subscriptions(asaas_subscription_id)
   where asaas_subscription_id is not null;
