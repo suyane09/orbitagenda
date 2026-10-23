@@ -31,7 +31,7 @@ export default function FinancePage() {
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState<PaymentMethod>('pix')
-  const [date, setDate] = useState(today)
+  const [date, setDate] = useState(() => today(timezone))
   const [appointmentId, setAppointmentId] = useState('')
   const [receivables, setReceivables] = useState<{ items: Receivable[]; truncated: boolean } | null>(null)
   const [receivablesError, setReceivablesError] = useState('')
