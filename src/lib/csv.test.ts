@@ -13,6 +13,7 @@ describe('CSV financeiro', () => {
     expect(csvCell('@algumaFuncao')).toBe('"\'@algumaFuncao"')
   })
   it('mantém números negativos como dados numéricos', () => {
-    expect(csvCell(-350)).toBe('"-350"')
+    expect(csvCell(-350)).toBe('"-350,00"')
+    expect(csvCell(35.5)).toBe('"35,50"')
   })
 })
