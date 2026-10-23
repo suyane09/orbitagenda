@@ -66,11 +66,15 @@ const RECEIVABLES_LIMIT = 500
 /** Atendimentos concluídos com saldo ainda não recebido (valor do serviço − pagamentos registrados). */
 export async function listReceivables(establishmentId: string): Promise<{ items: Receivable[]; truncated: boolean }> {
   const { data, error } = await supabase.from('appointments')
-    .select('id,starts_at,price_cents,customer_name,service_name')
+    .select('id,starts_at,price_cents,customers(full_name),services(name)')
     .eq('establishment_id', establishmentId).eq('status', 'completed').gt('price_cents', 0)
     .order('starts_at', { ascending: false }).limit(RECEIVABLES_LIMIT)
   if (error) throw error
-  const rows = (data ?? []) as unknown as Array<Pick<Receivable, 'id' | 'starts_at' | 'price_cents' | 'customer_name' | 'service_name'>>
+  const rows = (data ?? []).map((r) => ({
+    id: r.id, starts_at: r.starts_at, price_cents: r.price_cents,
+    customer_name: (r.customers as unknown as { full_name: string } | null)?.full_name ?? 'Cliente',
+    service_name: (r.services as unknown as { name: string } | null)?.name ?? 'Serviço',
+  }))
   const paid = paidByAppointment(await listEntriesByAppointments(establishmentId, rows.map((r) => r.id)))
   const items: Receivable[] = []
   for (const r of rows) {
@@ -79,4 +83,51 @@ export async function listReceivables(establishmentId: string): Promise<{ items:
     if (balance_cents > 0) items.push({ ...r, paid_cents, balance_cents })
   }
   return { items, truncated: rows.length >= RECEIVABLES_LIMIT }
+}
+
+/** Consulta paginada do dia: evita truncar o fechamento em 1.000 lançamentos. */
+export async function listDayEntries(establishmentId: string, day: string): Promise<Entry[]> {
+  const out: Entry[] = []
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await supabase.from('financial_entries')
+      .select('id,establishment_id,appointment_id,kind,description,amount_cents,method,occurred_on,created_at')
+      .eq('establishment_id', establishmentId).eq('occurred_on', day)
+      .order('created_at', { ascending: true }).order('id', { ascending: true })
+      .range(offset, offset + 499)
+    if (error) throw error
+    out.push(...((data ?? []) as Entry[]))
+    if (!data || data.length < 500) break
+  }
+  return out
+}
+export interface CashClosure {
+  id: string; establishment_id: string; business_date: string
+  status: 'closed' | 'reopened'; income_cents: number; expense_cents: number
+  refund_cents: number; net_cents: number; entry_count: number
+  closed_at: string; closed_by: string; reopened_at: string | null
+  reopened_by: string | null; reopen_reason: string | null
+}
+export interface CashClosureEvent {
+  id: string; closure_id: string; event: 'closed' | 'reopened'
+  actor_id: string; happened_at: string; reason: string | null
+}
+export async function listCashClosures(establishmentId: string): Promise<CashClosure[]> {
+  const { data, error } = await supabase.from('cash_closures').select('*')
+    .eq('establishment_id', establishmentId).order('closed_at', { ascending: false }).limit(100)
+  if (error) throw error
+  return (data ?? []) as CashClosure[]
+}
+export async function listCashClosureEvents(closureId: string): Promise<CashClosureEvent[]> {
+  const { data, error } = await supabase.from('cash_closure_events').select('*')
+    .eq('closure_id', closureId).order('happened_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as CashClosureEvent[]
+}
+export async function closeCashDay(establishmentId: string, date: string): Promise<void> {
+  const { error } = await supabase.rpc('close_cash_day', { p_establishment_id: establishmentId, p_date: date })
+  if (error) throw error
+}
+export async function reopenCashDay(closureId: string, reason: string): Promise<void> {
+  const { error } = await supabase.rpc('reopen_cash_day', { p_closure_id: closureId, p_reason: reason })
+  if (error) throw error
 }
