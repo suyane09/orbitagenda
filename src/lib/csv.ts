@@ -1,6 +1,6 @@
 /** Exportação CSV segura para abrir em planilhas (sem executar fórmulas vindas de clientes). */
 export function csvCell(value: string | number): string {
-  const raw = String(value)
+  const raw = typeof value === 'number' ? value.toFixed(2).replace('.', ',') : value
   // Escapa conteúdo que Excel/LibreOffice poderiam interpretar como fórmula.
   const safe = /^[\s\u0000-\u001f]*[=+@\-]/.test(raw) && typeof value === 'string' ? "'" + raw : raw
   return '"' + safe.replace(/"/g, '""') + '"'
