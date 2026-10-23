@@ -10,6 +10,10 @@
 - Para `PAYMENT_RECEIVED` com estado `RECEIVED` verificado pelo Asaas, o registro contratual passa a `active` em transação atômica. Outros eventos permanecem disponíveis para conciliação; **não suspendem o acesso automaticamente**.
 - RLS por estabelecimento nos eventos de pagamento; edição financeira e registro de pagamentos não são permitidos ao cliente.
 
+## Estado atual de implantação
+
+A migração SQL do Asaas foi aplicada no Supabase, mas a implantação das duas Edge Functions foi bloqueada pelas permissões da ferramenta de deploy usada nesta revisão. Os arquivos estão no GitHub e **precisam ser publicados por um meio autorizado** antes de configurar os Webhooks. A interface está deliberadamente desativada por padrão para não iniciar cobranças enquanto a infraestrutura não está pronta. Após implantar as funções e validar Sandbox, configurar `VITE_ASAAS_BILLING_ENABLED=true` nas variáveis de ambiente da Vercel para liberar o formulário. Não habilitar essa flag antes da validação.
+
 ## Configuração obrigatória ANTES da primeira cobrança
 
 Usar primeiro a conta [Asaas Sandbox](https://sandbox.asaas.com/). Documentação: https://docs.asaas.com/docs/sandbox.
