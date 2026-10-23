@@ -12,7 +12,7 @@
 
 ## Estado atual de implantação
 
-A migração SQL do Asaas foi aplicada no Supabase, mas a implantação das duas Edge Functions foi bloqueada pelas permissões da ferramenta de deploy usada nesta revisão. Os arquivos estão no GitHub e **precisam ser publicados por um meio autorizado** antes de configurar os Webhooks. A interface está deliberadamente desativada por padrão para não iniciar cobranças enquanto a infraestrutura não está pronta. Após implantar as funções e validar Sandbox, configurar `VITE_ASAAS_BILLING_ENABLED=true` nas variáveis de ambiente da Vercel para liberar o formulário. Não habilitar essa flag antes da validação.
+A migração SQL do Asaas e as duas Edge Functions foram publicadas no Supabase: `asaas-subscribe` exige JWT e `asaas-webhook` valida um token Asaas próprio. Elas permanecem **desativadas para cobranças enquanto os segredos Asaas não forem configurados**. A interface também está desativada por padrão para não iniciar cobrança. Após validar no Sandbox, configurar `VITE_ASAAS_BILLING_ENABLED=true` nas variáveis de ambiente da Vercel para liberar o formulário. Não habilitar essa flag antes da validação.
 
 ## Configuração obrigatória ANTES da primeira cobrança
 
