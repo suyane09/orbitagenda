@@ -1,6 +1,8 @@
 /** Variáveis públicas. Qualquer VITE_* vai para o bundle: nunca use chave secreta. */
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+/** Chave PÚBLICA do Cloudflare Turnstile (a secreta fica só na Edge Function). */
+const turnstile = (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined)?.trim() || ''
 
 /** Detecta service_role / secret key por engano (JWT legado ou formato sb_secret_). */
 export function isSecretKey(value: string): boolean {
@@ -25,4 +27,4 @@ export function getEnvError(): string | null {
   return null
 }
 
-export const env = { supabaseUrl: url ?? 'http://localhost:54321', supabaseKey: key ?? 'missing' }
+export const env = { supabaseUrl: url ?? 'http://localhost:54321', supabaseKey: key ?? 'missing', turnstileSiteKey: turnstile }

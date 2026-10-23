@@ -85,7 +85,10 @@ export function BlockModal({ estId, tz, options, initial, id, onClose, onSaved }
         <SelectField label="Profissional" value={v.professionalId} onChange={(e) => set({ professionalId: e.target.value })}
           options={[{ value: '', label: 'Todos os profissionais' }, ...options.professionals.map((p) => ({ value: p.id, label: p.name }))]} />
         <TextField label="Data" type="date" value={v.startDate} error={errors.startDate ?? errors.endDate} onChange={(e) => set({ startDate: e.target.value, endDate: e.target.value })} />
-        <Switch checked={v.allDay} onChange={(allDay) => set({ allDay })} label="Dia inteiro" />
+        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-control border border-hairline px-4 py-3">
+          <span className="text-sm font-medium text-graphite">Dia inteiro</span>
+          <Switch checked={v.allDay} onChange={(allDay) => set({ allDay })} label="Dia inteiro" />
+        </label>
         {!v.allDay && (
           <div className="grid grid-cols-2 gap-3">
             <TextField label="Início" type="time" step={900} value={v.startTime} error={errors.startTime} onChange={(e) => set({ startTime: e.target.value })} />

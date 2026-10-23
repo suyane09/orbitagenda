@@ -4,7 +4,9 @@ import { Alert } from '@/components/ui/Alert'
 import { TextField } from '@/components/ui/Field'
 import { OrbitMark } from '@/components/ui/Logo'
 import { Spinner } from '@/components/ui/Spinner'
+import { env } from '@/lib/env'
 import { supabase } from '@/lib/supabase'
+import { TurnstileWidget, type TurnstileHandle } from './Turnstile'
 import { BUSINESS_TYPES } from '@/lib/validation'
 
 type Service = {
@@ -1343,6 +1345,16 @@ function BookingStatus({ message }: { message: string }) {
   )
 }
 
+/** Lê só o código de erro (ex.: "rate_limited") da resposta HTTP da Edge Function; nunca mostra texto técnico ao usuário. */
+async function readErrorCode(err: unknown): Promise<string | null> {
+  try {
+    const res = (err as { context?: Response } | null)?.context
+    if (!res || typeof res.clone !== 'function') return null
+    const body = await res.clone().json() as { error?: unknown }
+    return typeof body.error === 'string' ? body.error : null
+  } catch { return null }
+}
+
 export default function PublicBookingPage() {
   const { slug } = useParams<{ slug: string }>()
   const [catalog, setCatalog] = useState<Catalog | null>(null)
@@ -1361,6 +1373,9 @@ export default function PublicBookingPage() {
   const [bookingError, setBookingError] = useState('')
   const [formError, setFormError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [captchaDown, setCaptchaDown] = useState(false)
+  const captchaRef = useRef<TurnstileHandle>(null)
   const [bookingId, setBookingId] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
   const [, tick] = useReducer((count: number) => count + 1, 0)
@@ -1544,6 +1559,15 @@ export default function PublicBookingPage() {
       return
     }
 
+    if (!env.turnstileSiteKey || captchaDown) {
+      setFormError('A verificação de segurança está indisponível no momento. Tente novamente em instantes.')
+      return
+    }
+    if (!captchaToken) {
+      setFormError('Conclua a verificação de segurança para confirmar.')
+      return
+    }
+
     setFormError('')
     setBookingError('')
     setSubmitting(true)
@@ -1561,13 +1585,28 @@ export default function PublicBookingPage() {
           time: formatTime(slot.slot_start, timeZone),
           customer_name: name,
           customer_phone: phoneDigits,
+          turnstile_token: captchaToken,
         },
       },
     )
 
     setSubmitting(false)
+    captchaRef.current?.reset() // o token do Turnstile é de uso único
 
     if (requestError || !data?.booking_id) {
+      const code = await readErrorCode(requestError)
+      if (code === 'rate_limited') {
+        setFormError('Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.')
+        return
+      }
+      if (code === 'captcha_failed' || code === 'captcha_required') {
+        setFormError('Não foi possível validar a verificação de segurança. Tente novamente.')
+        return
+      }
+      if (code === 'service_unavailable') {
+        setFormError('O agendamento online está indisponível no momento. Tente novamente em instantes.')
+        return
+      }
       setBookingError('Não foi possível concluir a reserva. O horário pode ter sido ocupado.')
       setSelectedSlot('')
       setRefreshKey((key) => key + 1) // recarrega a disponibilidade atualizada
@@ -1749,11 +1788,17 @@ export default function PublicBookingPage() {
                     placeholder="(82) 99999-9999"
                   />
 
+                  {env.turnstileSiteKey ? (
+                    <TurnstileWidget siteKey={env.turnstileSiteKey} handle={captchaRef} onToken={setCaptchaToken} onUnavailable={() => setCaptchaDown(true)} />
+                  ) : (
+                    <Alert>Verificação de segurança não configurada. Tente novamente mais tarde.</Alert>
+                  )}
+
                   {formError && <Alert>{formError}</Alert>}
 
                   <button
                     type="submit"
-                    disabled={submitting}
+                    disabled={submitting || !env.turnstileSiteKey}
                     className="group inline-flex h-12 w-full items-center justify-center gap-2.5 rounded-control focus-visible:rounded-control! bg-orbit px-6 text-[0.95rem] font-semibold text-white shadow-[0_10px_24px_-10px_rgba(59,54,217,0.7)] transition duration-200 hover:-translate-y-0.5 hover:bg-orbit-deep active:translate-y-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                   >
                     {submitting ? (
