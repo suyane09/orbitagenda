@@ -27,7 +27,11 @@ export default function LoginPage() {
     if (error) return setFormError(describeError(error))
     const from = (location.state as { from?: string } | null)?.from
     // Só aceita caminhos internos para evitar redirecionamento aberto.
-    navigate(from && from.startsWith('/') && !from.startsWith('//') ? from : '/app', { replace: true })
+    let pending = ''
+    try { pending = sessionStorage.getItem('orbit:pending-invite') ?? ''; sessionStorage.removeItem('orbit:pending-invite') } catch { /* navegador privado */ }
+    const target = from && from.startsWith('/') && !from.startsWith('//') ? from :
+      /^\/aceitar-convite\/[a-f0-9]{64}$/.test(pending) ? pending : '/app'
+    navigate(target, { replace: true })
   }
 
   return (

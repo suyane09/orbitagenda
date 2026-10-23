@@ -30,7 +30,11 @@ export default function SignUpPage() {
     })
     setLoading(false)
     if (error) return setFormError(describeError(error))
-    if (data.session) return navigate('/criar-estabelecimento', { replace: true })
+    if (data.session) {
+      let pending = ''
+      try { pending = sessionStorage.getItem('orbit:pending-invite') ?? ''; sessionStorage.removeItem('orbit:pending-invite') } catch { /* ignorar */ }
+      return navigate(/^\/aceitar-convite\/[a-f0-9]{64}$/.test(pending) ? pending : '/criar-estabelecimento', { replace: true })
+    }
     setSentTo(parsed.data.email)
   }
 
@@ -38,7 +42,7 @@ export default function SignUpPage() {
     return (
       <AuthLayout title="Confira seu e-mail" subtitle={`Enviamos um link de confirmação para ${sentTo}.`}
         footer={<Link to="/entrar" className="font-medium text-orbit hover:underline">Voltar para entrar</Link>}>
-        <Alert tone="info">Clique no link da mensagem para ativar sua conta. Se não encontrar, olhe a caixa de spam.</Alert>
+        <Alert tone="info">Clique no link da mensagem para ativar sua conta. Se recebeu convite para uma equipe, entre com este mesmo e-mail após a confirmação. Se não encontrar a mensagem, olhe a caixa de spam.</Alert>
       </AuthLayout>
     )
   }

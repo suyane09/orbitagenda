@@ -8,7 +8,13 @@ export function RequireAuth() {
   const { session, loading } = useAuth()
   const location = useLocation()
   if (loading) return <FullScreenLoader />
-  if (!session) return <Navigate to="/entrar" replace state={{ from: location.pathname }} />
+  if (!session) {
+    // Preserva o link de convite durante criação de conta e confirmação do e-mail.
+    if (/^\/aceitar-convite\/[a-f0-9]{64}$/.test(location.pathname)) {
+      try { sessionStorage.setItem('orbit:pending-invite', location.pathname) } catch { /* armazenamento indisponível */ }
+    }
+    return <Navigate to="/entrar" replace state={{ from: location.pathname }} />
+  }
   return <AccountProvider><Outlet /></AccountProvider>
 }
 
