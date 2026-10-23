@@ -23,6 +23,8 @@ const SchedulePage = lazy(() => import('@/features/schedule/SchedulePage'))
 const FinancePage = lazy(() => import('@/features/finance/FinancePage'))
 const CommissionsPage = lazy(() => import('@/features/commissions/CommissionsPage'))
 const ReportsPage = lazy(() => import('@/features/reports/ReportsPage'))
+const TeamPage = lazy(() => import('@/features/team/TeamPage'))
+const AcceptInvitePage = lazy(() => import('@/features/team/AcceptInvitePage'))
 const PublicBookingPage = lazy(() => import('@/features/public-booking/PublicBookingPage'))
 
 function NotFound() {
@@ -48,6 +50,7 @@ export default function App() {
 
               <Route element={<RequireAuth />}>
                 <Route path="/criar-estabelecimento" element={<OnboardingPage />} />
+                <Route path="/aceitar-convite/:token" element={<AcceptInvitePage />} />
                 <Route element={<AppShell />}>
                   <Route element={<RequireEstablishment />}>
                     <Route path="/app" element={<DashboardPage />} />
@@ -59,6 +62,7 @@ export default function App() {
                     <Route path="/app/financeiro" element={<FinancePage />} />
                     <Route path="/app/comissoes" element={<CommissionsPage />} />
                     <Route path="/app/relatorios" element={<ReportsPage />} />
+                    <Route path="/app/equipe" element={<TeamPage />} />
                   </Route>
                   <Route element={<RequireSuperadmin />}>
                     <Route path="/plataforma" element={<PlatformPage />} />
