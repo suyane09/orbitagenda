@@ -12,6 +12,7 @@ import { describeError } from '@/lib/errors'
 import { roleLabel } from '@/lib/labels'
 import { formatBRL, formatDuration } from '@/lib/money'
 import { formatLongDate } from '@/lib/time'
+import { listEntriesByAppointments, paidByAppointment } from '@/features/finance/api'
 import { loadDashboard, type DashboardData } from './api'
 
 type Filter = 'all' | 'pending' | 'confirmed' | 'completed'
@@ -129,8 +130,18 @@ function NowRow({ time, first, last }: { time: string; first: boolean; last: boo
   )
 }
 
-function AgendaRow({ a, tz, now, busy, first, last, onAdvance }: {
-  a: AppointmentRow; tz: string; now: Date; busy: boolean; first: boolean; last: boolean; onAdvance: (a: AppointmentRow, s: AppointmentStatus) => void
+function ReceiveButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick}
+      className="inline-flex h-8 items-center justify-center rounded-lg border border-hairline bg-surface px-3 text-[0.8125rem] font-medium transition-[background-color,border-color,transform] duration-150 hover:border-slate/50 active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100">
+      Receber
+    </button>
+  )
+}
+
+function AgendaRow({ a, tz, now, busy, first, last, balance = 0, onAdvance, onReceive }: {
+  a: AppointmentRow; tz: string; now: Date; busy: boolean; first: boolean; last: boolean; balance?: number
+  onAdvance: (a: AppointmentRow, s: AppointmentStatus) => void; onReceive?: (a: AppointmentRow) => void
 }) {
   const start = new Date(a.starts_at)
   const end = new Date(a.ends_at)
@@ -143,6 +154,7 @@ function AgendaRow({ a, tz, now, busy, first, last, onAdvance }: {
   const waiting = advance === 'completed' && !started
   const done = a.status === 'completed' || a.status === 'no_show' || a.status === 'cancelled'
   const go = advance ? () => onAdvance(a, advance) : undefined
+  const receive = balance > 0 && a.status === 'completed' && onReceive ? () => onReceive(a) : undefined
 
   return (
     <li className={`group grid gap-x-2 rounded-lg px-1 transition-colors duration-150 motion-reduce:transition-none @[40rem]:gap-x-3 @[40rem]:px-2 ${ROW_COLS} ${live ? 'bg-orbit-soft/60' : 'hover:bg-paper/80'}`}>
@@ -176,16 +188,20 @@ function AgendaRow({ a, tz, now, busy, first, last, onAdvance }: {
         <div className={`mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-2 @[40rem]:hidden`}>
           <span className={`inline-block rounded-md px-1.5 py-0.5 text-xs font-medium ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
           <span className="text-[0.8125rem] font-medium tabular-nums">{formatBRL(a.price_cents)}</span>
+          {receive && <span className="text-xs font-medium tabular-nums text-signal">Falta {formatBRL(balance)}</span>}
           {go && advance && <span className="ml-auto"><AdvanceButton advance={advance} busy={busy} waiting={waiting} onClick={go} /></span>}
+          {receive && <span className="ml-auto"><ReceiveButton onClick={receive} /></span>}
         </div>
       </div>
 
       <div className={`hidden flex-col items-end justify-center gap-1 @[40rem]:flex`}>
         <span className="text-sm font-medium tabular-nums">{formatBRL(a.price_cents)}</span>
+        {receive && <span className="text-xs font-medium tabular-nums text-signal">Falta {formatBRL(balance)}</span>}
         <span className={`inline-block rounded-md px-1.5 py-0.5 text-xs font-medium ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
       </div>
       <div className={`hidden items-center justify-end @[40rem]:flex`}>
         {go && advance && <AdvanceButton advance={advance} busy={busy} waiting={waiting} onClick={go} />}
+        {receive && <ReceiveButton onClick={receive} />}
       </div>
     </li>
   )
@@ -273,14 +289,20 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => new Date())
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [completePayment, setCompletePayment] = useState<AppointmentRow | null>(null)
+  const [payModal, setPayModal] = useState<{ a: AppointmentRow; receiveOnly: boolean } | null>(null)
+  const [paid, setPaid] = useState<Map<string, number> | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [copied, setCopied] = useState(false)
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setError(null)
-    try { setData(await loadDashboard(est.id, tz)); setNow(new Date()) }
+    try {
+      const d = await loadDashboard(est.id, tz)
+      let pm: Map<string, number> | null = null
+      try { pm = paidByAppointment(await listEntriesByAppointments(est.id, d.agenda.map((r) => r.id))) } catch { pm = null }
+      setData(d); setPaid(pm); setNow(new Date())
+    }
     catch (e) { if (!silent) setError(describeError(e, 'Não foi possível carregar os dados do painel.')) }
   }, [est.id, tz])
 
@@ -296,7 +318,7 @@ export default function DashboardPage() {
   const publicPath = `/agendar/${est.slug}`
 
   async function advance(a: AppointmentRow, status: AppointmentStatus) {
-    if (status === 'completed') { setCompletePayment(a); return }
+    if (status === 'completed') { setPayModal({ a, receiveOnly: false }); return }
     setBusyId(a.id)
     try { await setAppointmentStatus(est.id, a.id, status); notify(`Agendamento ${STATUS_LABEL[status].toLowerCase()}.`); await load(true) }
     catch (e) { notify(describeError(e, 'Não foi possível atualizar o agendamento.'), 'danger'); await load(true) }
@@ -315,17 +337,20 @@ export default function DashboardPage() {
   }
 
   const stats = useMemo(() => {
-    let confirmed = 0, pending = 0, completed = 0, revenue = 0, expected = 0, cancelled = 0
+    let confirmed = 0, pending = 0, completed = 0, revenue = 0, expected = 0, receivable = 0, cancelled = 0
     for (const r of data?.agenda ?? []) {
+      const paidCents = paid?.get(r.id) ?? 0
+      revenue += Math.max(0, paidCents) // receita = apenas pagamentos registrados
       if (r.status === 'cancelled') { cancelled++; continue }
       if (r.status === 'no_show') continue
       expected += r.price_cents
+      receivable += Math.max(0, r.price_cents - paidCents) // inclui saldo de concluídos
       if (r.status === 'confirmed') confirmed++
       else if (r.status === 'scheduled') pending++
-      else { completed++; revenue += r.price_cents }
+      else completed++
     }
-    return { total: confirmed + pending + completed, confirmed, pending, completed, revenue, expected, cancelled }
-  }, [data])
+    return { total: confirmed + pending + completed, confirmed, pending, completed, revenue, expected, receivable, cancelled }
+  }, [data, paid])
 
   const base = useMemo(() => (data?.agenda ?? []).filter((r) => r.status !== 'cancelled'), [data])
   const rows = useMemo(() => base.filter((r) => matches(filter, r.status)), [base, filter])
@@ -355,7 +380,8 @@ export default function DashboardPage() {
   const dash = (v: string) => (data ? v : '—')
   const clock = zoned(now.toISOString(), tz).time
   const pct = (n: number) => (stats.total ? `${(n / stats.total) * 100}%` : '0%')
-  const toReceive = stats.expected - stats.revenue
+  const toReceive = stats.receivable
+  const dashPay = (v: string) => (data && paid ? v : '—')
   const noServices = !!data && data.counts.services === 0
   const noPros = !!data && data.counts.professionals === 0
   const needsSetup = noServices || noPros
@@ -414,11 +440,11 @@ export default function DashboardPage() {
           hint={stats.total ? `de ${stats.total} no dia` : 'Nenhum no dia'} />
         <Kpi label="Pendentes" tone="bg-signal" loading={loading} value={dash(String(stats.pending))} className="border-r"
           hint={stats.pending ? <button type="button" onClick={reviewPending} className={`${textLink} inline-flex items-center gap-1`}>Revisar agora<Icon name="arrow" className="size-3" /></button> : 'Nada a confirmar'} />
-        <Kpi primary label="Faturamento" tone="bg-ok" loading={loading} value={dash(formatBRL(stats.revenue))}
+        <Kpi primary label="Faturamento" tone="bg-ok" loading={loading} value={dashPay(formatBRL(stats.revenue))}
           hint={`de ${formatBRL(stats.expected)} previsto`}>
           {data && (
             <div aria-hidden="true" className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-hairline">
-              <span className="block h-full rounded-full bg-ok transition-[width] duration-500 motion-reduce:transition-none" style={{ width: stats.expected ? `${(stats.revenue / stats.expected) * 100}%` : '0%' }} />
+              <span className="block h-full rounded-full bg-ok transition-[width] duration-500 motion-reduce:transition-none" style={{ width: stats.expected ? `${Math.min(100, (stats.revenue / stats.expected) * 100)}%` : '0%' }} />
             </div>
           )}
         </Kpi>
@@ -501,7 +527,8 @@ export default function DashboardPage() {
               {items.map((it, i) => it.kind === 'now'
                 ? <NowRow key="now" time={clock} first={i === 0} last={i === items.length - 1} />
                 : <AgendaRow key={it.a.id} a={it.a} tz={tz} now={now} busy={busyId === it.a.id} first={i === 0} last={i === items.length - 1}
-                    onAdvance={(row, s) => void advance(row, s)} />)}
+                    balance={it.a.status === 'completed' && paid ? Math.max(0, it.a.price_cents - (paid.get(it.a.id) ?? 0)) : 0}
+                    onAdvance={(row, s) => void advance(row, s)} onReceive={(row) => setPayModal({ a: row, receiveOnly: true })} />)}
             </ul>
           )}
         </section>
@@ -536,7 +563,7 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="min-w-0">
                     <p className="text-xs text-slate">A receber</p>
-                    <p className="mt-1.5 truncate font-display text-[1.625rem] font-semibold leading-none tracking-tight tabular-nums">{formatBRL(toReceive)}</p>
+                    <p className="mt-1.5 truncate font-display text-[1.625rem] font-semibold leading-none tracking-tight tabular-nums">{dashPay(formatBRL(toReceive))}</p>
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs text-slate">Ticket médio</p>
@@ -639,9 +666,14 @@ export default function DashboardPage() {
           </Panel>
         </div>
       </div>
-      {completePayment && <CompletePaymentModal a={completePayment} estId={est.id} tz={tz}
-        onClose={() => { setCompletePayment(null); void load(true) }}
-        onCompleted={(paid) => { setCompletePayment(null); notify(paid ? 'Atendimento concluído e pagamento registrado.' : 'Atendimento concluído sem novo pagamento.'); void load(true) }} />}
+      {payModal && <CompletePaymentModal a={payModal.a} estId={est.id} tz={tz} receiveOnly={payModal.receiveOnly}
+        onClose={() => { setPayModal(null); void load(true) }}
+        onCompleted={(wasPaid) => {
+          const receiveOnly = payModal.receiveOnly
+          setPayModal(null)
+          notify(receiveOnly ? 'Pagamento registrado.' : wasPaid ? 'Atendimento concluído e pagamento registrado.' : 'Atendimento concluído sem novo pagamento.')
+          void load(true)
+        }} />}
       {toast}
     </div>
   )
