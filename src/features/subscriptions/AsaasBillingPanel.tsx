@@ -10,6 +10,7 @@ export function AsaasBillingPanel({ establishmentId, planPrice, linked, provisio
   provisioning: boolean
   onFinished: () => Promise<void>
 }) {
+  const billingAvailable = import.meta.env.VITE_ASAAS_BILLING_ENABLED === 'true'
   const [taxId,setTaxId]=useState('')
   const [billingType,setBillingType]=useState('PIX')
   const [agreed,setAgreed]=useState(false)
@@ -18,6 +19,7 @@ export function AsaasBillingPanel({ establishmentId, planPrice, linked, provisio
   const [notice,setNotice]=useState('')
   async function submit(e:FormEvent) {
     e.preventDefault()
+    if (!billingAvailable) return setError('Cobranças ainda não foram ativadas para este estabelecimento.')
     const digits=taxId.replace(/\D/g,'')
     if(![11,14].includes(digits.length))return setError('Informe um CPF ou CNPJ válido do responsável pelo pagamento.')
     if(!agreed)return setError('Confirme que deseja gerar cobranças recorrentes para este plano.')
@@ -46,6 +48,7 @@ export function AsaasBillingPanel({ establishmentId, planPrice, linked, provisio
     <h2 className="font-display text-lg font-semibold">Pagamento recorrente com Asaas</h2>
     {linked?<p className="mt-3 text-sm leading-relaxed text-slate">Sua empresa já possui uma assinatura vinculada ao Asaas. As cobranças e os pagamentos são acompanhados pelo provedor, sem exigir uma nova contratação.</p>:
     provisioning?<p className="mt-3 text-sm leading-relaxed text-slate">Uma contratação foi iniciada e está em conferência. Por segurança, novas tentativas estão bloqueadas para evitar cobranças duplicadas. Entre em contato com o suporte.</p>:
+    !billingAvailable?<p className="mt-3 text-sm leading-relaxed text-slate">As cobranças recorrentes estão em fase de configuração. Seu plano continua visível acima; quando o Asaas estiver conectado e validado, a contratação poderá ser feita aqui com segurança.</p>:
     <><p className="mt-2 text-sm leading-relaxed text-slate">Após a configuração da conta Asaas pelo administrador, você poderá autorizar uma mensalidade de <strong>R$ {(planPrice/100).toFixed(2).replace('.',',')}</strong>. Não informe dados de cartão: nesta etapa estão disponíveis Pix e boleto.</p>
       <form onSubmit={e=>void submit(e)} className="mt-5 space-y-4">
         <TextField label="CPF ou CNPJ do pagador" value={taxId} onChange={e=>setTaxId(e.target.value)} placeholder="Somente números" required inputMode="numeric"/>
