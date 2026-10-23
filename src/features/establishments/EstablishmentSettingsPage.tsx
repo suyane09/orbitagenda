@@ -14,7 +14,7 @@ export default function EstablishmentSettingsPage() {
   const est = current?.establishment
   const isOwner = current?.role === 'owner'
   const [name,setName] = useState(est?.name ?? '')
-  const [businessType,setBusinessType] = useState(est?.business_type ?? 'barbershop')
+  const [businessType,setBusinessType] = useState<string>(est?.business_type ?? 'barbershop')
   const [phone,setPhone] = useState(est?.phone ?? '')
   const [timezone,setTimezone] = useState(est?.timezone ?? 'America/Maceio')
   const [errors,setErrors] = useState<Record<string,string>>({})
