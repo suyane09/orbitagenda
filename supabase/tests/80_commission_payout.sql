@@ -29,8 +29,8 @@ insert into public.appointments(id,establishment_id,professional_id,service_id,c
  values ('e4000000-0000-0000-0000-000000000001',current_setting('tests.est')::uuid,
  'e1000000-0000-0000-0000-000000000001','e2000000-0000-0000-0000-000000000001',
  'e3000000-0000-0000-0000-000000000001',
- ((current_date + 3)::timestamp + interval '10 hours') at time zone 'UTC',
- ((current_date + 3)::timestamp + interval '10 hours 30 minutes') at time zone 'UTC',
+ ((current_date + 3)::timestamp + interval '10 hours') at time zone 'America/Maceio',
+ ((current_date + 3)::timestamp + interval '10 hours 30 minutes') at time zone 'America/Maceio',
  'scheduled',10000);
 -- A conclusão captura a regra vigente.
 update public.appointments set status='completed' where id='e4000000-0000-0000-0000-000000000001';
