@@ -5,6 +5,7 @@ import { useAccount } from '@/features/establishments/AccountProvider'
 import { formatBRL, parseBRL } from '@/lib/money'
 import { describeError } from '@/lib/errors'
 import { todayInZone } from '@/lib/schedule'
+import { buildCsv } from '@/lib/csv'
 import { CompletePaymentModal } from '@/features/appointments/CompletePaymentModal'
 import { CashClosingPanel } from './CashClosingPanel'
 import { createEntry, listEntries, listReceivables, type Entry, type EntryKind, type PaymentMethod, type Receivable } from './api'
@@ -66,6 +67,25 @@ export default function FinancePage() {
   }, { income: 0, expense: 0, refund: 0 }), [entries])
   const net = totals.income - totals.expense - totals.refund
 
+  function exportPeriod() {
+    if (loading || error || !entries.length) return
+    const rows: Array<Array<string | number>> = [
+      ['Data', 'Tipo', 'Descrição', 'Valor (R$)', 'Forma de pagamento', 'ID do agendamento'],
+      ...entries.map(e => [e.occurred_on, kinds[e.kind], e.description,
+        (e.kind === 'income' ? e.amount_cents : -e.amount_cents) / 100,
+        methods[e.method], e.appointment_id ?? '']),
+    ]
+    const blob = new Blob([buildCsv(rows)], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `orbit-agenda-financeiro-${from}-a-${to}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault(); setMessage(''); setError('')
     const cents = parseBRL(amount)
@@ -95,6 +115,7 @@ export default function FinancePage() {
       <div className="min-w-[145px] flex-1 sm:max-w-[190px]"><TextField label="De" type="date" value={from} max={to} onChange={e => setFrom(e.target.value)} /></div>
       <div className="min-w-[145px] flex-1 sm:max-w-[190px]"><TextField label="Até" type="date" value={to} min={from} onChange={e => setTo(e.target.value)} /></div>
       <Button type="button" variant="outline" onClick={refreshAll}>Atualizar</Button>
+      <Button type="button" variant="outline" onClick={exportPeriod} disabled={loading || !!error || entries.length === 0}>Exportar CSV</Button>
     </section>
 
     <section aria-label="Indicadores financeiros" className={`${card} grid grid-cols-2 divide-x divide-y divide-hairline overflow-hidden md:grid-cols-3 xl:grid-cols-3`}>
