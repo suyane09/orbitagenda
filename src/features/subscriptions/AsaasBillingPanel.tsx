@@ -18,7 +18,7 @@ export function AsaasBillingPanel({ establishmentId, planPrice, linked, provisio
   const [notice,setNotice]=useState('')
   async function submit(e:FormEvent) {
     e.preventDefault()
-    const digits=taxId.replace(/\\D/g,'')
+    const digits=taxId.replace(/\D/g,'')
     if(![11,14].includes(digits.length))return setError('Informe um CPF ou CNPJ válido do responsável pelo pagamento.')
     if(!agreed)return setError('Confirme que deseja gerar cobranças recorrentes para este plano.')
     if(busy)return
