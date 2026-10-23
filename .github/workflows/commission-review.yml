@@ -3,11 +3,13 @@ on:
   push:
     branches:
       - 'feature/commission-2c-panel-review'
+      - 'feat/secure-team-invitations'
   pull_request:
     paths:
       - 'src/features/commissions/**'
       - 'src/features/finance/**'
       - 'src/features/reports/**'
+      - 'src/features/team/**'
       - 'src/App.tsx'
       - 'src/components/ui/Icon.tsx'
       - 'src/lib/**'
