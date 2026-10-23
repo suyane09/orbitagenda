@@ -6,6 +6,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useAccount } from '@/features/establishments/AccountProvider'
 import { setAppointmentStatus, type AppointmentRow, type AppointmentStatus } from '@/features/appointments/api'
+import { CompletePaymentModal } from '@/features/appointments/CompletePaymentModal'
 import { STATUS_CHIP, STATUS_LABEL, isActive, zoned } from '@/lib/agenda'
 import { describeError } from '@/lib/errors'
 import { roleLabel } from '@/lib/labels'
@@ -272,6 +273,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => new Date())
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [completePayment, setCompletePayment] = useState<AppointmentRow | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [copied, setCopied] = useState(false)
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -294,6 +296,7 @@ export default function DashboardPage() {
   const publicPath = `/agendar/${est.slug}`
 
   async function advance(a: AppointmentRow, status: AppointmentStatus) {
+    if (status === 'completed') { setCompletePayment(a); return }
     setBusyId(a.id)
     try { await setAppointmentStatus(est.id, a.id, status); notify(`Agendamento ${STATUS_LABEL[status].toLowerCase()}.`); await load(true) }
     catch (e) { notify(describeError(e, 'Não foi possível atualizar o agendamento.'), 'danger'); await load(true) }
@@ -636,6 +639,9 @@ export default function DashboardPage() {
           </Panel>
         </div>
       </div>
+      {completePayment && <CompletePaymentModal a={completePayment} estId={est.id} tz={tz}
+        onClose={() => { setCompletePayment(null); void load(true) }}
+        onCompleted={(paid) => { setCompletePayment(null); notify(paid ? 'Atendimento concluído e pagamento registrado.' : 'Atendimento concluído sem novo pagamento.'); void load(true) }} />}
       {toast}
     </div>
   )
