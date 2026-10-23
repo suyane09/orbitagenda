@@ -1,10 +1,25 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from 'react'
 import { STATUS_CHIP, STATUS_LABEL, clipToDay, isActive, layoutLanes, minutesToTime, offHours, snapMinutes, timeToMinutes, zoned } from '@/lib/agenda'
 import { blockKindLabel, type ScheduleBlock } from '@/lib/schedule'
 import type { AgendaOptions, AppointmentRow, AppointmentStatus } from './api'
 
 export const STATUS_DOT: Record<AppointmentStatus, string> = {
   scheduled: 'bg-amber-500', confirmed: 'bg-orbit', completed: 'bg-emerald-600', cancelled: 'bg-slate/60', no_show: 'bg-danger',
+}
+const MARK_PATH: Record<AppointmentStatus, ReactNode> = {
+  scheduled: <><circle cx="5" cy="5" r="3.2" /><path d="M5 3.5V5l1.1.8" /></>,
+  confirmed: <path d="M2.7 5.2l1.7 1.7 3-3.6" />,
+  completed: <path d="M1.6 5.4l1.6 1.6 2.5-3.1M5.2 6.5l.5.5 2.7-3.3" />,
+  cancelled: <path d="M3.2 3.2l3.6 3.6M6.8 3.2L3.2 6.8" />,
+  no_show: <path d="M5 2.6v3M5 7.5v.01" />,
+}
+/** Marca de status (cor + ícone): não depende só da cor para ser reconhecida. */
+export function StatusMark({ status, className = '' }: { status: AppointmentStatus; className?: string }) {
+  return (
+    <span aria-hidden="true" className={`grid size-4 shrink-0 place-items-center rounded-full text-white ${STATUS_DOT[status]} ${className}`}>
+      <svg viewBox="0 0 10 10" className="size-2.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{MARK_PATH[status]}</svg>
+    </span>
+  )
 }
 export const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('') || '·'
 
@@ -292,6 +307,8 @@ export function DayTimeline({ date, today, appointments, professionals, blocks, 
                     const time = zoned(a.starts_at, tz).time
                     const range = `${time}–${zoned(a.ends_at, tz).time}`
                     const dead = a.status === 'cancelled'
+                    const narrow = n >= 3 // vários atendimentos simultâneos: coluna estreita, conteúdo enxuto
+                    const compact = h < 44
                     const movable = canInteract && isActive(a.status)
                     return (
                       <button key={a.id} type="button" data-appt onClick={() => { if (!suppressClick.current) onOpen(a) }}
@@ -300,27 +317,27 @@ export function DayTimeline({ date, today, appointments, professionals, blocks, 
                         aria-label={`${range}, ${a.customer_name}, ${a.service_name}, ${STATUS_LABEL[a.status]}`}
                         style={{
                           top: y(it.start) + 1.5, height: h,
-                          left: `calc(${(lane / n) * 100}% + 3px)`, width: `calc(${100 / n}% - 6px)`,
+                          left: `calc(${(lane / n) * 100}% + 3px)`, width: `calc(${100 / n}% - 5px)`,
                           borderLeftColor: a.professional_color,
                           backgroundColor: `color-mix(in srgb, ${a.professional_color} 13%, white)`,
                         }}
-                        className={`absolute z-10 overflow-hidden rounded-lg border border-l-[3px] border-black/[0.06] px-2 text-left text-xs leading-tight shadow-[0_1px_2px_rgb(17_20_26/0.06)] transition hover:z-20 hover:shadow-md focus-visible:z-20 ${movable ? 'cursor-grab' : ''} ${h < 44 ? 'py-0.5' : 'py-1.5'} ${dead ? 'opacity-55' : ''} ${drag?.id === a.id ? 'opacity-30' : ''}`}>
-                        {h < 44 ? (
+                        className={`absolute z-10 overflow-hidden rounded-[10px] border border-l-4 border-black/[0.07] text-left leading-tight shadow-[0_0_0_1px_#fff,0_1px_3px_rgb(17_20_26/0.10)] transition hover:z-20 hover:shadow-[0_0_0_1px_#fff,0_6px_16px_-4px_rgb(17_20_26/0.25)] focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-orbit ${narrow ? 'px-1.5 text-[11px]' : 'px-2 text-xs'} ${movable ? 'cursor-grab' : ''} ${compact ? 'py-0.5' : 'py-1.5'} ${dead ? 'opacity-60 saturate-50' : ''} ${drag?.id === a.id ? 'opacity-30' : ''}`}>
+                        {compact ? (
                           <span className="flex h-full items-center gap-1.5">
-                            <span className="truncate"><span className="font-semibold tabular-nums">{time}</span> <span className={`font-medium ${dead ? 'line-through' : ''}`}>{a.customer_name}</span></span>
-                            <span aria-hidden="true" className={`ml-auto size-2 shrink-0 rounded-full ${STATUS_DOT[a.status]}`} />
+                            <span className="min-w-0 truncate"><span className="font-semibold tabular-nums">{time}</span> <span className={`font-medium ${dead ? 'line-through' : ''}`}>{a.customer_name}</span></span>
+                            <StatusMark status={a.status} className="ml-auto" />
                           </span>
                         ) : (
                           <>
                             <span className="flex items-center gap-1.5">
-                              <span className={`truncate font-semibold ${dead ? 'line-through' : ''}`}>{a.customer_name}</span>
-                              {h < 64 && <span aria-hidden="true" className={`ml-auto size-2 shrink-0 rounded-full ${STATUS_DOT[a.status]}`} />}
+                              <span className={`min-w-0 truncate font-semibold ${dead ? 'line-through' : ''}`}>{a.customer_name}</span>
+                              <StatusMark status={a.status} className="ml-auto" />
                             </span>
-                            <span className="mt-0.5 block truncate text-graphite/80">{a.service_name}</span>
+                            <span className="mt-0.5 block truncate text-graphite/80">{narrow ? <span className="tabular-nums">{time}</span> : a.service_name}</span>
                             {h >= 64 && (
                               <span className="mt-1 flex items-center gap-1.5">
-                                <span className="truncate tabular-nums text-slate">{range}</span>
-                                <span className={`ml-auto shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
+                                <span className="min-w-0 truncate tabular-nums text-slate">{narrow ? a.service_name : range}</span>
+                                {!narrow && <span className={`ml-auto shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>}
                               </span>
                             )}
                           </>
@@ -342,7 +359,8 @@ export function DayTimeline({ date, today, appointments, professionals, blocks, 
         </div>
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-hairline bg-[#fafbfe] px-4 py-2 text-[11px] text-slate">
-        <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm border border-l-[3px] border-black/10 bg-orbit-soft" />Atendimento</span>
+        {(Object.keys(STATUS_DOT) as AppointmentStatus[]).map((s) => <span key={s} className="inline-flex items-center gap-1.5"><StatusMark status={s} />{STATUS_LABEL[s]}</span>)}
+        <span className="hidden h-3 w-px bg-hairline sm:block" aria-hidden="true" />
         <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm border border-slate/30" style={{ backgroundImage: HATCH }} />Bloqueado</span>
         <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm border border-hairline" style={{ backgroundColor: 'rgb(17 20 26 / 0.06)' }} />Fora do expediente</span>
         <span className="hidden sm:inline">Arraste um atendimento para reagendar · segure e arraste no celular</span>

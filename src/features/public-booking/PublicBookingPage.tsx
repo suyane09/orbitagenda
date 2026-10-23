@@ -468,7 +468,7 @@ function BookingConfirmation({
         className="pointer-events-none absolute left-1/2 top-[-12rem] size-[34rem] -translate-x-1/2 rounded-full bg-orbit-soft blur-3xl"
       />
 
-      <div className="relative mx-auto flex min-h-dvh max-w-xl flex-col px-5 pb-10 pt-10 sm:pt-14">
+      <div className="relative mx-auto flex min-h-dvh max-w-xl flex-col px-5 pb-[max(2.5rem,calc(env(safe-area-inset-bottom)+1.5rem))] pt-[max(2.5rem,calc(env(safe-area-inset-top)+1.75rem))] sm:pt-[max(3.5rem,calc(env(safe-area-inset-top)+2rem))]">
         <header className="text-center">
           <SuccessMark show={entered} />
 
@@ -480,7 +480,7 @@ function BookingConfirmation({
             <h1
               ref={headingRef}
               tabIndex={-1}
-              className="mt-4 font-display text-[2rem] font-semibold leading-tight tracking-tight outline-none sm:text-[2.5rem]"
+              className="mt-4 scroll-mt-[calc(env(safe-area-inset-top)+1.5rem)] font-display text-[2rem] font-semibold leading-tight tracking-tight outline-none sm:text-[2.5rem]"
             >
               {firstName ? `Tudo certo, ${firstName}!` : 'Tudo certo!'}
             </h1>
@@ -1249,11 +1249,13 @@ function MobileSummaryBar({
   nextStepLabel,
   canConfirm,
   submitting,
+  disabled = false,
 }: {
   service: Service
   nextStepLabel: string
   canConfirm: boolean
   submitting: boolean
+  disabled?: boolean
 }) {
   return (
     <div className="fixed inset-x-0 bottom-0 z-20 border-t border-hairline bg-surface/90 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
@@ -1268,7 +1270,7 @@ function MobileSummaryBar({
           <button
             type="submit"
             form="booking-form"
-            disabled={submitting}
+            disabled={submitting || disabled}
             className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-control focus-visible:rounded-control! bg-orbit px-5 text-sm font-semibold text-white shadow-[0_10px_24px_-10px_rgba(59,54,217,0.7)] transition duration-200 hover:bg-orbit-deep active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transition-none"
           >
             {submitting && <Spinner className="size-4" />}
@@ -1799,7 +1801,7 @@ export default function PublicBookingPage() {
                   <button
                     type="submit"
                     disabled={submitting || !env.turnstileSiteKey}
-                    className="group inline-flex h-12 w-full items-center justify-center gap-2.5 rounded-control focus-visible:rounded-control! bg-orbit px-6 text-[0.95rem] font-semibold text-white shadow-[0_10px_24px_-10px_rgba(59,54,217,0.7)] transition duration-200 hover:-translate-y-0.5 hover:bg-orbit-deep active:translate-y-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                    className="group hidden h-12 w-full items-center lg:inline-flex justify-center gap-2.5 rounded-control focus-visible:rounded-control! bg-orbit px-6 text-[0.95rem] font-semibold text-white shadow-[0_10px_24px_-10px_rgba(59,54,217,0.7)] transition duration-200 hover:-translate-y-0.5 hover:bg-orbit-deep active:translate-y-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                   >
                     {submitting ? (
                       <>
@@ -1845,6 +1847,7 @@ export default function PublicBookingPage() {
           nextStepLabel={nextStepLabel}
           canConfirm={Boolean(selectedSlot)}
           submitting={submitting}
+          disabled={!env.turnstileSiteKey}
         />
       )}
     </main>

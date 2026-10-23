@@ -16,7 +16,7 @@ import {
   NEXT_STATUS, getAvailableSlots, listAppointments, listBlocksInRange, loadAgendaOptions, loadWorkingSegments, saveAppointment, searchCustomers, setAppointmentStatus,
   type AgendaOptions, type AppointmentRow, type AppointmentStatus, type Slot, type WorkSegment,
 } from './api'
-import { DayTimeline, initials, type WorkRange } from './AgendaGrid'
+import { DayTimeline, StatusMark, initials, type WorkRange } from './AgendaGrid'
 import { BlockDetails, BlockModal, MoveModal, type MoveState } from './AgendaModals'
 
 interface FormState { id: string | null; customer: { id: string; name: string } | null; serviceId: string; professionalId: string; date: string; time: string; notes: string }
@@ -145,9 +145,13 @@ function ApptCard({ a, tz, onOpen }: { a: AppointmentRow; tz: string; onOpen: (a
   const range = `${zoned(a.starts_at, tz).time}–${zoned(a.ends_at, tz).time}`
   return (
     <button type="button" onClick={() => onOpen(a)} style={{ borderLeftColor: a.professional_color }}
-      className={`block w-full rounded-lg border border-hairline border-l-[3px] bg-white px-2.5 py-2.5 text-left text-xs shadow-[0_1px_2px_rgb(17_20_26/0.04)] transition hover:border-orbit hover:shadow-sm ${a.status === 'cancelled' ? 'opacity-60' : ''}`}>
-      <span className="font-medium tabular-nums">{range}</span> <span className={`ml-1 rounded px-1 ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
-      <span className="mt-0.5 block truncate">{a.customer_name} · {a.service_name}</span>
+      className={`block w-full rounded-[10px] border border-hairline border-l-4 bg-white px-2.5 py-2.5 text-left text-xs shadow-[0_1px_2px_rgb(17_20_26/0.05)] transition hover:border-orbit hover:shadow-md focus-visible:outline-2 focus-visible:outline-orbit ${a.status === 'cancelled' ? 'opacity-60 saturate-50' : ''}`}>
+      <span className="flex items-center justify-between gap-2">
+        <span className="font-semibold tabular-nums">{range}</span>
+        <span className={`inline-flex items-center gap-1 rounded-full py-px pl-0.5 pr-1.5 text-[10px] font-medium ${STATUS_CHIP[a.status]}`}><StatusMark status={a.status} className="size-3.5!" />{STATUS_LABEL[a.status]}</span>
+      </span>
+      <span className={`mt-1 block truncate font-medium ${a.status === 'cancelled' ? 'line-through' : ''}`}>{a.customer_name}</span>
+      <span className="block truncate text-slate">{a.service_name}</span>
     </button>
   )
 }
@@ -178,7 +182,7 @@ function ApptDetails({ a, tz, busyId, onClose, onEdit, onAction }: {
             <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold text-white" style={{ backgroundColor: a.professional_color }}>{initials(a.customer_name)}</span>
             <p className="min-w-0 break-words font-display text-lg font-semibold leading-tight">{a.customer_name}</p>
           </div>
-          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
+          <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full py-0.5 pl-1 pr-2.5 text-xs font-medium ${STATUS_CHIP[a.status]}`}><StatusMark status={a.status} />{STATUS_LABEL[a.status]}</span>
         </div>
         <dl className="divide-y divide-hairline rounded-control border border-hairline text-sm">
           {rows.map(([k, v]) => (
