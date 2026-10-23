@@ -22,6 +22,7 @@ const AgendaPage = lazy(() => import('@/features/appointments/AgendaPage'))
 const SchedulePage = lazy(() => import('@/features/schedule/SchedulePage'))
 const FinancePage = lazy(() => import('@/features/finance/FinancePage'))
 const CommissionsPage = lazy(() => import('@/features/commissions/CommissionsPage'))
+const ReportsPage = lazy(() => import('@/features/reports/ReportsPage'))
 const PublicBookingPage = lazy(() => import('@/features/public-booking/PublicBookingPage'))
 
 function NotFound() {
@@ -57,6 +58,7 @@ export default function App() {
                     <Route path="/app/horarios" element={<SchedulePage />} />
                     <Route path="/app/financeiro" element={<FinancePage />} />
                     <Route path="/app/comissoes" element={<CommissionsPage />} />
+                    <Route path="/app/relatorios" element={<ReportsPage />} />
                   </Route>
                   <Route element={<RequireSuperadmin />}>
                     <Route path="/plataforma" element={<PlatformPage />} />

@@ -8,7 +8,7 @@ Sistema web de gestão para barbearias e salões: agendamento interno, página p
 - **Reserva pública:** catálogo e escolha de horários; proteção contra abuso com Cloudflare Turnstile e rate limiting na Edge Function.
 - **Financeiro:** receitas, despesas, estornos, pagamentos parciais, valores a receber e fechamento do dia.
 - **Comissões:** regra por profissional, captura ao concluir atendimento, cálculo sobre valores efetivamente recebidos e histórico de repasses. **Registrar repasse não transfere dinheiro nem lança despesa automaticamente.**
-- **Multiempresa:** vínculos e permissões por estabelecimento, protegidos por políticas RLS no Supabase.
+- **Relatórios:** faturamento por recebimentos, saldo financeiro, serviços concluídos, ticket médio e rankings por profissional e por serviço, com filtros de período.\n- **Multiempresa:** vínculos e permissões por estabelecimento, protegidos por políticas RLS no Supabase.
 - **Painel da plataforma:** listagem de estabelecimentos para administradores.
 
 ## Tecnologias

@@ -7,6 +7,9 @@ on:
     paths:
       - 'src/features/commissions/**'
       - 'src/features/finance/**'
+      - 'src/features/reports/**'
+      - 'src/App.tsx'
+      - 'src/components/ui/Icon.tsx'
       - 'src/lib/**'
       - 'README.md'
       - 'supabase/migrations/**'

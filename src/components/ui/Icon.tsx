@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 export type IconName =
   | 'home' | 'calendar' | 'users' | 'service' | 'user' | 'clock' | 'plus' | 'link' | 'check'
-  | 'cash' | 'arrow' | 'alert' | 'refresh' | 'shield' | 'store' | 'external' | 'copy' | 'logout'
+  | 'cash' | 'chart' | 'arrow' | 'alert' | 'refresh' | 'shield' | 'store' | 'external' | 'copy' | 'logout'
 
 const PATHS: Record<IconName, ReactNode> = {
   home: (<><path d="M3 11l9-8 9 8" /><path d="M5 10v10h14V10" /><path d="M10 20v-6h4v6" /></>),
@@ -15,6 +15,7 @@ const PATHS: Record<IconName, ReactNode> = {
   link: (<><path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5" /><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5" /></>),
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
   cash: (<><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M6 12h.01M18 12h.01" /></>),
+  chart: (<><path d="M4 20V12M10 20V4M16 20v-9M22 20V7" /><path d="M2 21h22" /></>),
   arrow: <path d="M5 12h14M13 6l6 6-6 6" />,
   alert: (<><circle cx="12" cy="12" r="9" /><path d="M12 8v4.5M12 16h.01" /></>),
   refresh: (<><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 4v7h-7" /></>),
