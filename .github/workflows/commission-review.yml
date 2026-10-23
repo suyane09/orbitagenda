@@ -9,6 +9,8 @@ on:
       - 'src/features/finance/**'
       - 'src/features/reports/**'
       - 'src/features/team/**'
+      - 'src/features/subscriptions/**'
+      - 'src/features/platform/**'
       - 'src/features/establishments/**'
       - 'src/App.tsx'
       - 'src/components/ui/Icon.tsx'

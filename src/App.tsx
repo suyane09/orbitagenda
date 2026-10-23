@@ -24,6 +24,7 @@ const FinancePage = lazy(() => import('@/features/finance/FinancePage'))
 const CommissionsPage = lazy(() => import('@/features/commissions/CommissionsPage'))
 const ReportsPage = lazy(() => import('@/features/reports/ReportsPage'))
 const TeamPage = lazy(() => import('@/features/team/TeamPage'))
+const SubscriptionPage = lazy(() => import('@/features/subscriptions/SubscriptionPage'))
 const EstablishmentSettingsPage = lazy(() => import('@/features/establishments/EstablishmentSettingsPage'))
 const AcceptInvitePage = lazy(() => import('@/features/team/AcceptInvitePage'))
 const PublicBookingPage = lazy(() => import('@/features/public-booking/PublicBookingPage'))
@@ -64,6 +65,7 @@ export default function App() {
                     <Route path="/app/comissoes" element={<CommissionsPage />} />
                     <Route path="/app/relatorios" element={<ReportsPage />} />
                     <Route path="/app/equipe" element={<TeamPage />} />
+                    <Route path="/app/assinatura" element={<SubscriptionPage />} />
                     <Route path="/app/estabelecimento" element={<EstablishmentSettingsPage />} />
                   </Route>
                   <Route element={<RequireSuperadmin />}>
