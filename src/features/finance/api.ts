@@ -31,12 +31,17 @@ export async function createEntry(establishmentId: string, input: {
 
 /** Consulta todos os lançamentos de um atendimento, sem depender do filtro de datas do painel. */
 export async function listAppointmentEntries(establishmentId: string, appointmentId: string): Promise<Entry[]> {
-  const { data, error } = await supabase.from('financial_entries')
-    .select('id,establishment_id,appointment_id,kind,description,amount_cents,method,occurred_on,created_at')
-    .eq('establishment_id', establishmentId).eq('appointment_id', appointmentId)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return (data ?? []) as Entry[]
+  const all: Entry[] = []
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await supabase.from('financial_entries')
+      .select('id,establishment_id,appointment_id,kind,description,amount_cents,method,occurred_on,created_at')
+      .eq('establishment_id', establishmentId).eq('appointment_id', appointmentId)
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(offset, offset + 499)
+    if (error) throw error
+    all.push(...(data ?? []) as Entry[])
+    if (!data || data.length < 500) return all
+  }
 }
 
 /** Lançamentos de vários atendimentos (em lotes, para não estourar o tamanho da URL). */
