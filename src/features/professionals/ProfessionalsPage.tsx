@@ -12,6 +12,8 @@ import { describeError } from '@/lib/errors'
 import { fieldErrors, PROFESSIONAL_COLORS, professionalSchema } from '@/lib/validation'
 import { useAccount } from '@/features/establishments/AccountProvider'
 import type { Professional } from '@/types/models'
+import { CommissionSettingsModal } from '@/features/commissions/CommissionSettingsModal'
+import { loadCommissionSettings, type CommissionSettings } from '@/features/commissions/api'
 import { deleteProfessional, loadProfessionals, saveProfessional, setProfessionalActive, type ProfessionalsData } from './api'
 
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('')
@@ -124,6 +126,9 @@ export default function ProfessionalsPage() {
   const { toast, notify } = useToast()
 
   const [data, setData] = useState<ProfessionalsData | null>(null)
+  const [commissions, setCommissions] = useState<CommissionSettings[]>([])
+  const [commissionError, setCommissionError] = useState('')
+  const [commissionEditing, setCommissionEditing] = useState<Professional | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
@@ -140,6 +145,19 @@ export default function ProfessionalsPage() {
   }, [est.id])
 
   useEffect(() => { setData(null); void load() }, [load])
+  const loadCommissions = useCallback(async () => {
+    if (!isOwner) return
+    try { setCommissions(await loadCommissionSettings(est.id)); setCommissionError('') }
+    catch (err) { setCommissionError(describeError(err, 'Não foi possível carregar as comissões.')) }
+  }, [est.id, isOwner])
+  useEffect(() => { setCommissions([]); void loadCommissions() }, [loadCommissions])
+  const commissionById = useMemo(() => new Map(commissions.map((c) => [c.professional_id, c])), [commissions])
+  const commissionLabel = (id: string) => {
+    const c = commissionById.get(id)
+    if (!c || c.mode === 'none') return 'Sem comissão'
+    if (c.mode === 'percentage') return `${(c.rate_basis_points / 100).toLocaleString('pt-BR')}% por atendimento`
+    return `${(c.fixed_cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} por atendimento`
+  }
 
   const serviceName = useMemo(() => new Map((data?.services ?? []).map((s) => [s.id, s.name])), [data])
 
@@ -186,6 +204,7 @@ export default function ProfessionalsPage() {
         {isOwner && <Button variant="accent" onClick={() => setEditing('new')}>Novo profissional</Button>}
       </header>
 
+      {isOwner && commissionError && <div className="mt-6"><Alert>{commissionError}</Alert></div>}
       {!isOwner && <div className="mt-6"><Alert tone="info">Somente proprietários criam e editam profissionais. Você pode consultar a lista.</Alert></div>}
 
       {!data ? (
@@ -224,6 +243,7 @@ export default function ProfessionalsPage() {
                         <span className={`mt-0.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${p.is_active ? 'bg-ok-soft text-ok' : 'bg-paper text-slate'}`}>{p.is_active ? 'Ativo' : 'Inativo'}</span>
                       </div>
                     </div>
+                    {isOwner && <p className="mt-3 text-xs font-medium text-slate">Comissão: {commissionLabel(p.id)}</p>}
                     {p.bio && <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-slate">{p.bio}</p>}
                     <div className="mt-3 flex-1">
                       {names.length === 0 ? (
@@ -239,6 +259,7 @@ export default function ProfessionalsPage() {
                       <div className="mt-4 flex items-center gap-1.5 border-t border-hairline pt-3">
                         <Switch checked={p.is_active} disabled={togglingId === p.id} label={`${p.name}: ${p.is_active ? 'desativar' : 'ativar'}`} onChange={(next) => void toggle(p, next)} />
                         <span className="flex-1" />
+                        <Button variant="ghost" className="h-9 px-3" onClick={() => setCommissionEditing(p)} aria-label={`Configurar comissão de ${p.name}`}>Comissão</Button>
                         <Button variant="ghost" className="h-9 px-3" onClick={() => setEditing(p)} aria-label={`Editar ${p.name}`}>Editar</Button>
                         <Button variant="ghost" className="h-9 px-3 hover:!text-danger" onClick={() => { setDeleteError(''); setDeleting(p) }} aria-label={`Excluir ${p.name}`}>Excluir</Button>
                       </div>
@@ -251,6 +272,10 @@ export default function ProfessionalsPage() {
         </>
       )}
 
+      {isOwner && commissionEditing && <CommissionSettingsModal key={commissionEditing.id} establishmentId={est.id}
+        professionalId={commissionEditing.id} professionalName={commissionEditing.name}
+        settings={commissionById.get(commissionEditing.id)} onClose={() => setCommissionEditing(null)}
+        onSaved={() => { setCommissionEditing(null); notify('Comissão atualizada.'); void loadCommissions() }} />}
       {editing && data && (
         <ProfessionalForm professional={editing === 'new' ? null : editing} services={data.services} establishmentId={est.id}
           onClose={() => setEditing(null)} onSaved={(m) => { setEditing(null); notify(m); void load() }} />
