@@ -1,5 +1,5 @@
--- ETAPA 2B: demonstrativo de comissões; sem repasses.
--- EXECUTAR SOMENTE APÓS REVISÃO EM AMBIENTE DE TESTES.
+-- ETAPA 2C: demonstrativo de comissões validado; sem repasses.
+-- Histórico: implantada na produção pelo SQL Editor; NÃO reaplicar.
 -- Substitui o rascunho 20261023190000_commission_snapshot_draft.sql:
 -- NÃO EXECUTE AMBOS. Se já executou o rascunho, interrompa e revise a migração.
 -- Histórico: atendimentos já concluídos ficam FORA do demonstrativo, sem retroatividade.
@@ -13,6 +13,11 @@ create table public.appointment_commission_snapshots (
   mode text not null check (mode in ('none','percentage','fixed')),
   rate_basis_points integer not null check (rate_basis_points between 0 and 10000),
   fixed_cents integer not null check (fixed_cents >= 0),
+  constraint commission_snapshot_rule_consistency check (
+    (mode='none' and rate_basis_points=0 and fixed_cents=0)
+    or (mode='percentage' and fixed_cents=0)
+    or (mode='fixed' and rate_basis_points=0)
+  ),
   captured_at timestamptz not null default now(),
   foreign key (professional_id, establishment_id)
     references public.professionals(id, establishment_id)
@@ -29,6 +34,10 @@ create function private.capture_appointment_commission() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare r public.professional_commission_rules%rowtype;
 begin
+  if tg_op <> 'UPDATE' or tg_table_schema <> 'public' or tg_table_name <> 'appointments'
+     or tg_name <> 'capture_appointment_commission' then
+    raise exception 'invalid_trigger_context' using errcode = '42501';
+  end if;
   if new.status = 'completed' and old.status is distinct from 'completed' then
     select * into r from public.professional_commission_rules
       where establishment_id = new.establishment_id and professional_id = new.professional_id;
