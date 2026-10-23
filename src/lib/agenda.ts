@@ -80,3 +80,36 @@ export function layoutLanes(items: readonly LaneItem[]): LanePlacement[] {
   flush()
   return out
 }
+
+export const minutesToTime = (m: number): string => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+
+/** Arredonda minutos para múltiplos de `step` (mode: nearest | floor | ceil). */
+export function snapMinutes(m: number, step: number, mode: 'nearest' | 'floor' | 'ceil' = 'nearest'): number {
+  const f = mode === 'floor' ? Math.floor : mode === 'ceil' ? Math.ceil : Math.round
+  return f(m / step) * step
+}
+
+/** Trecho de [startIso, endIso) que cai em `date` (fuso do estabelecimento), em minutos do dia; null se não toca o dia. */
+export function clipToDay(startIso: string, endIso: string, date: string, timeZone: string): { start: number; end: number } | null {
+  const s = zoned(startIso, timeZone)
+  const e = zoned(endIso, timeZone)
+  if (s.date > date || e.date < date) return null
+  const start = s.date < date ? 0 : timeToMinutes(s.time)
+  const end = e.date > date ? 24 * 60 : timeToMinutes(e.time)
+  return end > start ? { start, end } : null
+}
+
+/** Partes de [from, to] NÃO cobertas pelos trechos de expediente (para sombrear "fora do expediente"). */
+export function offHours(segments: ReadonlyArray<{ start: number; end: number }>, from: number, to: number): Array<{ start: number; end: number }> {
+  const out: Array<{ start: number; end: number }> = []
+  let cur = from
+  for (const s of [...segments].sort((a, b) => a.start - b.start)) {
+    if (s.start > cur) out.push({ start: cur, end: Math.min(s.start, to) })
+    cur = Math.max(cur, s.end)
+    if (cur >= to) break
+  }
+  if (cur < to) out.push({ start: cur, end: to })
+  return out.filter((r) => r.end > r.start)
+}
+
+export const weekdayOf = (date: string): number => new Date(`${date}T00:00:00Z`).getUTCDay()

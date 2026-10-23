@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
@@ -7,15 +7,17 @@ import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
 import { ErrorState } from '@/components/ui/States'
 import { useToast } from '@/components/ui/Toast'
-import { ACTION_LABEL, STATUS_CHIP, STATUS_LABEL, addDays, dayLabel, groupByDate, isActive, layoutLanes, timeToMinutes, weekDays, zoned } from '@/lib/agenda'
+import { ACTION_LABEL, STATUS_CHIP, STATUS_LABEL, addDays, dayLabel, groupByDate, isActive, minutesToTime, timeToMinutes, weekDays, weekdayOf, zoned } from '@/lib/agenda'
 import { describeError } from '@/lib/errors'
 import { formatBRL, formatDuration } from '@/lib/money'
-import { todayInZone } from '@/lib/schedule'
+import { emptyBlockForm, blockToForm, todayInZone, type ScheduleBlock } from '@/lib/schedule'
 import { useAccount } from '@/features/establishments/AccountProvider'
 import {
-  NEXT_STATUS, getAvailableSlots, listAppointments, loadAgendaOptions, saveAppointment, searchCustomers, setAppointmentStatus,
-  type AgendaOptions, type AppointmentRow, type AppointmentStatus, type Slot,
+  NEXT_STATUS, getAvailableSlots, listAppointments, listBlocksInRange, loadAgendaOptions, loadWorkingSegments, saveAppointment, searchCustomers, setAppointmentStatus,
+  type AgendaOptions, type AppointmentRow, type AppointmentStatus, type Slot, type WorkSegment,
 } from './api'
+import { DayTimeline, initials, type WorkRange } from './AgendaGrid'
+import { BlockDetails, BlockModal, MoveModal, type MoveState } from './AgendaModals'
 
 interface FormState { id: string | null; customer: { id: string; name: string } | null; serviceId: string; professionalId: string; date: string; time: string; notes: string }
 
@@ -138,12 +140,6 @@ function AppointmentModal({ estId, tz, options, initial, original, onClose, onSa
   )
 }
 
-// ---- Apresentação de status ---------------------------------------------------------
-const STATUS_DOT: Record<AppointmentStatus, string> = {
-  scheduled: 'bg-amber-500', confirmed: 'bg-orbit', completed: 'bg-emerald-600', cancelled: 'bg-slate/60', no_show: 'bg-danger',
-}
-const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('') || '·'
-
 // ---- Cartão compacto (visão semanal) ----------------------------------------------
 function ApptCard({ a, tz, onOpen }: { a: AppointmentRow; tz: string; onOpen: (a: AppointmentRow) => void }) {
   const range = `${zoned(a.starts_at, tz).time}–${zoned(a.ends_at, tz).time}`
@@ -208,176 +204,6 @@ function ApptDetails({ a, tz, busyId, onClose, onEdit, onAction }: {
   )
 }
 
-// ---- Grade do dia -------------------------------------------------------------------
-// A escala representa horas, não disponibilidade. Blocos e durações vêm só dos agendamentos reais;
-// a disponibilidade de verdade é validada no modal (RPC get_available_slots) e no banco.
-const HOUR_H = 72          // 36px por 30 min
-const TIME_W = 60
-const COL_MIN = 176
-const LINE_HOUR = '#e6e9ef'
-const LINE_HALF = '#f1f3f6'
-
-function DayTimeline({ date, today, appointments, professionals, tz, onOpen, onCreate }: {
-  date: string
-  today: string
-  appointments: AppointmentRow[]
-  professionals: AgendaOptions['professionals']
-  tz: string
-  onOpen: (a: AppointmentRow) => void
-  onCreate: (professionalId: string, time: string) => void
-}) {
-  const scroller = useRef<HTMLDivElement>(null)
-  const [nowMin, setNowMin] = useState<number | null>(null)
-  useEffect(() => {
-    if (date !== today) { setNowMin(null); return }
-    const tick = () => setNowMin(timeToMinutes(zoned(new Date().toISOString(), tz).time))
-    tick()
-    const t = setInterval(tick, 60_000)
-    return () => clearInterval(t)
-  }, [date, today, tz])
-
-  const items = useMemo(() => appointments.map((a) => {
-    const start = timeToMinutes(zoned(a.starts_at, tz).time)
-    const dur = Math.max(15, Math.round((new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000))
-    return { a, start, end: Math.min(24 * 60, start + dur), dur }
-  }), [appointments, tz])
-
-  const minStart = items.length ? Math.min(...items.map((i) => i.start)) : 8 * 60
-  const maxEnd = items.length ? Math.max(...items.map((i) => i.end)) : 19 * 60
-  const startHour = Math.max(0, Math.min(8, Math.floor(minStart / 60)))
-  const endHour = Math.min(24, Math.max(20, Math.ceil(maxEnd / 60)))
-  const height = (endHour - startHour) * HOUR_H
-  const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i)
-  const y = (min: number) => ((min - startHour * 60) / 60) * HOUR_H
-  const columns = professionals.length ? professionals : [{ id: 'unassigned', name: 'Atendimentos', color: '#3b36d9' }]
-  const template = `${TIME_W}px repeat(${columns.length}, minmax(${COL_MIN}px, 1fr))`
-  const minWidth = TIME_W + columns.length * COL_MIN
-
-  // Leva o scroll para o primeiro atendimento (ou para "agora") ao trocar de dia.
-  useEffect(() => {
-    const el = scroller.current
-    if (!el) return
-    const anchor = items.length ? minStart : nowMin ?? startHour * 60
-    el.scrollTop = Math.max(0, y(anchor) - HOUR_H)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, items.length])
-
-  return (
-    <div>
-      <div ref={scroller} role="region" aria-label="Grade de horários por profissional" tabIndex={0}
-        className="max-h-[min(76dvh,860px)] overflow-auto overscroll-contain">
-        <div style={{ minWidth }}>
-          {/* Cabeçalho dos profissionais */}
-          <div className="sticky top-0 z-30 grid border-b border-hairline bg-white/95 backdrop-blur" style={{ gridTemplateColumns: template }}>
-            <div className="sticky left-0 z-10 border-r border-[#eceff3] bg-white" />
-            {columns.map((pro) => {
-              const count = appointments.filter((a) => pro.id === 'unassigned' || a.professional_id === pro.id).length
-              return (
-                <div key={pro.id} className="flex min-w-0 items-center gap-2.5 border-l border-[#eceff3] px-3 py-3 first:border-l-0">
-                  <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white" style={{ backgroundColor: pro.color }}>{initials(pro.name)}</span>
-                  <span className="min-w-0 leading-tight">
-                    <span className="block truncate text-sm font-semibold">{pro.name}</span>
-                    <span className="block text-[11px] text-slate">{count === 0 ? 'Sem atendimentos' : `${count} ${count === 1 ? 'atendimento' : 'atendimentos'}`}</span>
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Corpo */}
-          <div className="grid" style={{ gridTemplateColumns: template }}>
-            <div className="sticky left-0 z-20 border-r border-[#eceff3] bg-white" style={{ height }}>
-              <div className="relative" style={{ height }}>
-                {hours.map((h, i) => (
-                  <span key={h} className="absolute right-2.5 text-[11px] tabular-nums text-slate" style={{ top: i * HOUR_H + (i === 0 ? 4 : -7) }}>{String(h).padStart(2, '0')}:00</span>
-                ))}
-              </div>
-            </div>
-            {columns.map((pro) => {
-              const mine = items.filter((i) => pro.id === 'unassigned' || i.a.professional_id === pro.id)
-              const lanes = layoutLanes(mine)
-              return (
-                <div key={pro.id} className="relative border-l border-[#eceff3] first:border-l-0" style={{
-                  height,
-                  backgroundImage: `linear-gradient(${LINE_HOUR} 1px, transparent 1px), linear-gradient(${LINE_HALF} 1px, transparent 1px)`,
-                  backgroundSize: `100% ${HOUR_H}px, 100% ${HOUR_H}px`,
-                  backgroundPosition: `0 0, 0 ${HOUR_H / 2}px`,
-                }}>
-                  {/* Faixas clicáveis de 30 min */}
-                  {hours.flatMap((h) => [0, 30].map((m) => {
-                    const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-                    return (
-                      <button key={time} type="button" onClick={() => onCreate(pro.id, time)}
-                        aria-label={`Novo agendamento com ${pro.name} às ${time}`}
-                        title={`Novo agendamento às ${time}`}
-                        className="group absolute inset-x-0 flex items-center justify-center transition-colors hover:bg-orbit-soft/60 focus-visible:z-10 focus-visible:bg-orbit-soft focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-orbit"
-                        style={{ top: y(h * 60 + m), height: HOUR_H / 2 }}>
-                        <span className="pointer-events-none rounded-full bg-white px-2 py-0.5 text-[11px] font-medium tabular-nums text-orbit opacity-0 shadow-sm ring-1 ring-orbit/15 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">+ {time}</span>
-                      </button>
-                    )
-                  }))}
-
-                  {/* Agora */}
-                  {nowMin !== null && nowMin >= startHour * 60 && nowMin <= endHour * 60 && (
-                    <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 z-20 h-px bg-danger/70" style={{ top: y(nowMin) }}>
-                      <span className="absolute -left-1 -top-[3px] size-[7px] rounded-full bg-danger" />
-                    </div>
-                  )}
-
-                  {/* Agendamentos */}
-                  {mine.map((it, idx) => {
-                    const { a } = it
-                    const { lane, lanes: n } = lanes[idx]!
-                    const h = Math.max(22, (it.dur / 60) * HOUR_H - 3)
-                    const time = zoned(a.starts_at, tz).time
-                    const range = `${time}–${zoned(a.ends_at, tz).time}`
-                    const dead = a.status === 'cancelled'
-                    return (
-                      <button key={a.id} type="button" onClick={() => onOpen(a)}
-                        title={`${range} · ${a.customer_name} · ${a.service_name} · ${STATUS_LABEL[a.status]}`}
-                        aria-label={`${range}, ${a.customer_name}, ${a.service_name}, ${STATUS_LABEL[a.status]}`}
-                        style={{
-                          top: y(it.start) + 1.5, height: h,
-                          left: `calc(${(lane / n) * 100}% + 3px)`, width: `calc(${100 / n}% - 6px)`,
-                          borderLeftColor: a.professional_color,
-                          backgroundColor: `color-mix(in srgb, ${a.professional_color} 13%, white)`,
-                        }}
-                        className={`absolute z-10 overflow-hidden rounded-lg border border-l-[3px] border-black/[0.06] px-2 text-left text-xs leading-tight shadow-[0_1px_2px_rgb(17_20_26/0.06)] transition hover:z-20 hover:shadow-md focus-visible:z-20 ${h < 44 ? 'py-0.5' : 'py-1.5'} ${dead ? 'opacity-55' : ''}`}>
-                        {h < 44 ? (
-                          <span className="flex h-full items-center gap-1.5">
-                            <span className="truncate"><span className="font-semibold tabular-nums">{time}</span> <span className={`font-medium ${dead ? 'line-through' : ''}`}>{a.customer_name}</span></span>
-                            <span aria-hidden="true" className={`ml-auto size-2 shrink-0 rounded-full ${STATUS_DOT[a.status]}`} />
-                          </span>
-                        ) : (
-                          <>
-                            <span className="flex items-center gap-1.5">
-                              <span className={`truncate font-semibold ${dead ? 'line-through' : ''}`}>{a.customer_name}</span>
-                              {h < 64 && <span aria-hidden="true" className={`ml-auto size-2 shrink-0 rounded-full ${STATUS_DOT[a.status]}`} />}
-                            </span>
-                            <span className="mt-0.5 block truncate text-graphite/80">{a.service_name}</span>
-                            {h >= 64 && (
-                              <span className="mt-1 flex items-center gap-1.5">
-                                <span className="truncate tabular-nums text-slate">{range}</span>
-                                <span className={`ml-auto shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
-                              </span>
-                            )}
-                          </>
-                        )}
-                        {(h < 64) && <span className="sr-only"> {range}, {STATUS_LABEL[a.status]}</span>}
-                      </button>
-                    )
-                  })}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-      <p className="border-t border-hairline bg-[#fafbfe] px-4 py-2 text-xs text-slate">Toque em um horário vazio para agendar; a disponibilidade é conferida depois de escolher o serviço.</p>
-    </div>
-  )
-}
-
 // ---- Página -------------------------------------------------------------------------
 export default function AgendaPage() {
   const { current } = useAccount()
@@ -396,18 +222,29 @@ export default function AgendaPage() {
   const [detail, setDetail] = useState<AppointmentRow | null>(null)
   const [confirmCancel, setConfirmCancel] = useState<AppointmentRow | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [blocks, setBlocks] = useState<ScheduleBlock[]>([])
+  const [segments, setSegments] = useState<WorkSegment[] | null>(null)
+  const [blockMode, setBlockMode] = useState(false)
+  const [blockModal, setBlockModal] = useState<{ id: string | null; form: ReturnType<typeof emptyBlockForm> } | null>(null)
+  const [blockDetail, setBlockDetail] = useState<ScheduleBlock | null>(null)
+  const [move, setMove] = useState<MoveState | null>(null)
 
   const days = useMemo(() => (view === 'week' ? weekDays(date) : [date]), [view, date])
   const from = days[0]!; const to = days[days.length - 1]!
 
   const load = useCallback(async () => {
     setError(null)
-    try { setRows(await listAppointments(est.id, from, to, proFilter || null)) }
+    try {
+      const [r, b] = await Promise.all([listAppointments(est.id, from, to, proFilter || null), listBlocksInRange(est.id, from, to)])
+      setRows(r); setBlocks(b)
+    }
     catch (e) { setError(describeError(e, 'Não foi possível carregar a agenda.')) }
   }, [est.id, from, to, proFilter])
 
   useEffect(() => { setRows(null); void load() }, [load])
   useEffect(() => { loadAgendaOptions(est.id).then(setOptions).catch((e) => setError(describeError(e))) }, [est.id])
+  // Expediente cadastrado (só leitura, para sombrear "fora do expediente"); se falhar, a grade simplesmente não sombreia.
+  useEffect(() => { loadWorkingSegments(est.id).then(setSegments).catch(() => setSegments(null)) }, [est.id])
   // Atualiza sozinho a cada minuto (outros usuários também mexem na agenda).
   useEffect(() => { const t = setInterval(() => { void load() }, 60_000); return () => clearInterval(t) }, [load])
 
@@ -438,26 +275,70 @@ export default function AgendaPage() {
   const editFromDetail = (a: AppointmentRow) => { setDetail(null); openEdit(a) }
 
   const proGroups = options?.professionals.filter((p) => !proFilter || p.id === proFilter) ?? []
+  const hoursToday = useMemo<Record<string, WorkRange[]> | null>(() => {
+    if (!segments) return null
+    const wd = weekdayOf(date)
+    const out: Record<string, WorkRange[]> = {}
+    for (const sg of segments) if (sg.weekday === wd) (out[sg.professional_id] ??= []).push({ start: timeToMinutes(sg.start_time), end: timeToMinutes(sg.end_time) })
+    return out
+  }, [segments, date])
+
+  // ---- Reagendar por arrastar: confere a disponibilidade real no servidor antes de pedir confirmação ----
+  async function requestMove(a: AppointmentRow, professionalId: string, startMin: number) {
+    const time = minutesToTime(startMin)
+    const pro = options?.professionals.find((p) => p.id === professionalId)
+    if (!pro) return
+    const base: MoveState = { a, professionalId, professionalName: pro.name, date, time, phase: 'checking' }
+    setMove(base)
+    try {
+      const slots = await getAvailableSlots(est.id, professionalId, a.service_id, date, a.id)
+      const ok = slots.some((sl) => zoned(sl.slot_start, tz).time === time && zoned(sl.slot_start, tz).date === date)
+      setMove((m) => (m && m.a.id === a.id ? { ...m, phase: ok ? 'ok' : 'unavailable' } : m))
+    } catch (e) {
+      setMove((m) => (m && m.a.id === a.id ? { ...m, phase: 'unavailable', error: describeError(e, 'Não foi possível conferir a disponibilidade.') } : m))
+    }
+  }
+  async function confirmMove() {
+    if (!move || move.phase !== 'ok') return
+    const m = move
+    setMove({ ...m, phase: 'saving' })
+    try {
+      // O servidor valida de novo (expediente, bloqueios, conflitos) dentro da transação.
+      await saveAppointment(est.id, { id: m.a.id, customerId: m.a.customer_id, professionalId: m.professionalId, serviceId: m.a.service_id, date: m.date, time: m.time, notes: m.a.notes })
+      setMove(null); notify('Atendimento reagendado.'); await load()
+    } catch (e) {
+      setMove({ ...m, phase: 'unavailable', error: describeError(e, 'Não foi possível reagendar o atendimento.') })
+      await load()
+    }
+  }
+
+  // ---- Bloqueio de horários ----
+  const openBlockForm = (professionalId: string, startMin: number | null, endMin: number | null) => {
+    const f = emptyBlockForm(date < today ? today : date)
+    setBlockModal({ id: null, form: { ...f, kind: 'block', professionalId, allDay: startMin === null, startTime: startMin === null ? '12:00' : minutesToTime(startMin), endTime: endMin === null ? '13:00' : minutesToTime(Math.min(endMin, 1439)) } })
+  }
+  const onBlockRange = (professionalId: string, startMin: number, endMin: number) => { setBlockMode(false); openBlockForm(professionalId === 'unassigned' ? '' : professionalId, startMin, endMin) }
+  const editBlock = (b: ScheduleBlock) => { setBlockDetail(null); setBlockModal({ id: b.id, form: blockToForm(b, tz) }) }
   const daily = byDay[date] ?? []
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5 px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-6 sm:px-6 lg:pt-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
+    <div className={`mx-auto max-w-7xl px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 sm:px-6 lg:pt-6 ${view === 'day' && !error && rows !== null ? 'flex h-full min-h-[46rem] flex-col gap-4' : 'space-y-5'}`}>
+      <header className="flex shrink-0 flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-orbit">Operação / Agendamentos</p>
-          <h1 className="font-display text-[2rem] font-semibold leading-tight tracking-tight sm:text-[2.4rem]">Agenda</h1>
-          <p className="text-sm text-slate">Organize os atendimentos e acompanhe sua equipe em um só lugar.</p>
+          <h1 className="font-display text-[1.6rem] font-semibold leading-tight tracking-tight sm:text-[2rem]">Agenda</h1>
+          <p className="hidden text-sm text-slate [@media(min-height:900px)]:block">Organize os atendimentos e acompanhe sua equipe em um só lugar.</p>
         </div>
         <Button variant="accent" onClick={() => openNew(date)} disabled={!options}>+ Novo agendamento</Button>
       </header>
 
-      <div className="flex flex-wrap items-center gap-3 text-xs text-slate">
+      <div className="hidden shrink-0 flex-wrap items-center gap-3 text-xs text-slate [@media(min-height:900px)]:flex">
         <span className="rounded-full border border-hairline bg-white px-3 py-1.5"><strong className="mr-1 text-graphite">{rows === null ? '—' : counts.total}</strong> agendamentos no período</span>
         <span className="rounded-full border border-hairline bg-white px-3 py-1.5"><strong className="mr-1 text-graphite">{rows === null ? '—' : counts.confirmed}</strong> confirmados</span>
         <span className="rounded-full border border-hairline bg-white px-3 py-1.5"><strong className="mr-1 text-graphite">{rows === null ? '—' : counts.completed}</strong> concluídos</span>
       </div>
 
-      <section aria-label="Controles da agenda" className="rounded-xl border border-hairline bg-surface p-3 shadow-[0_1px_2px_rgb(17_20_26/0.04)] sm:p-4">
+      <section aria-label="Controles da agenda" className="shrink-0 rounded-xl border border-hairline bg-surface p-3 shadow-[0_1px_2px_rgb(17_20_26/0.04)] sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline pb-4">
           <div className="flex min-w-0 items-center gap-2">
             <div role="group" aria-label="Visualização" className="flex rounded-lg bg-paper p-1">
@@ -473,8 +354,24 @@ export default function AgendaPage() {
           </div>
           <p className="font-display text-sm font-semibold capitalize sm:text-base">{view === 'day' ? dayLabel(date) : `${dayLabel(from, 'short')} — ${dayLabel(to, 'short')}`}</p>
         </div>
-        <div className="grid gap-3 pt-4 sm:grid-cols-3">
+        {view === 'day' && (
+          <div role="group" aria-label="Dias da semana" className="-mx-1 flex gap-1 overflow-x-auto px-1 pt-3">
+            {weekDays(date).map((d) => {
+              const active = d === date
+              return (
+                <button key={d} type="button" aria-pressed={active} aria-label={dayLabel(d)} onClick={() => setDate(d)}
+                  className={`relative flex min-w-[3.1rem] flex-1 flex-col items-center rounded-lg px-2 py-1.5 text-center transition ${active ? 'bg-ink text-white' : 'text-graphite hover:bg-paper'}`}>
+                  <span className={`text-[10px] font-medium uppercase tracking-wider ${active ? 'text-white/70' : 'text-slate'}`}>{new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', weekday: 'short' }).format(new Date(`${d}T00:00:00Z`)).replace('.', '')}</span>
+                  <span className="text-base font-semibold tabular-nums leading-tight">{d.slice(8)}</span>
+                  {d === today && <span aria-hidden="true" className={`absolute bottom-0.5 size-1 rounded-full ${active ? 'bg-white' : 'bg-orbit'}`} />}
+                </button>
+              )
+            })}
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-3 pt-3 sm:grid-cols-3 sm:pt-4"><div className="col-span-2 sm:col-span-1">
           <TextField label="Selecionar data" type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
+          </div>
           <SelectField label="Profissional" value={proFilter} onChange={(e) => setProFilter(e.target.value)}
             options={[{ value: '', label: 'Todos os profissionais' }, ...(options?.professionals ?? []).map((p) => ({ value: p.id, label: p.name }))]} />
           <SelectField label="Situação" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
@@ -485,12 +382,25 @@ export default function AgendaPage() {
       {error ? <ErrorState title="Agenda indisponível" message={error} onRetry={() => void load()} />
         : rows === null ? <div className="grid place-items-center rounded-xl border border-hairline bg-white py-20" role="status" aria-label="Carregando agenda"><Spinner className="size-6" /></div>
         : view === 'day' ? (
-          <section aria-label="Atendimentos do dia" className="overflow-hidden rounded-xl border border-hairline bg-surface shadow-[0_1px_2px_rgb(17_20_26/0.04)]">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline px-4 py-4 sm:px-5">
+          <section aria-label="Atendimentos do dia" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-hairline bg-surface shadow-[0_1px_2px_rgb(17_20_26/0.04)]">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-hairline px-4 py-3 sm:px-5">
               <div><h2 className="font-display text-base font-semibold">Atendimentos do dia</h2><p className="mt-0.5 text-xs text-slate">{daily.length} {daily.length === 1 ? 'agendamento' : 'agendamentos'} nos filtros selecionados</p></div>
-              <button type="button" onClick={() => openNew(date)} disabled={!options} className="rounded-lg px-3 py-2 text-sm font-medium text-orbit hover:bg-orbit-soft disabled:opacity-50">+ Adicionar</button>
+              <div className="flex items-center gap-1">
+                <button type="button" aria-pressed={blockMode} onClick={() => setBlockMode((v) => !v)} disabled={!options} className={`rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50 ${blockMode ? 'bg-slate/15 text-ink' : 'text-slate hover:bg-ink/5 hover:text-ink'}`}>Bloquear horário</button>
+                <button type="button" onClick={() => openNew(date)} disabled={!options} className="rounded-lg px-3 py-2 text-sm font-medium text-orbit hover:bg-orbit-soft disabled:opacity-50">+ Adicionar</button>
+              </div>
             </div>
-            <DayTimeline date={date} today={today} appointments={daily} professionals={proGroups} tz={tz} onOpen={setDetail} onCreate={openAt} />
+            {blockMode && (
+              <div role="status" className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-hairline bg-slate/10 px-4 py-2.5 text-sm text-graphite">
+                <span>Modo bloqueio: toque ou arraste na grade para escolher o período.</span>
+                <span className="flex gap-2">
+                  <button type="button" className="rounded-md px-2.5 py-1.5 font-medium text-orbit hover:bg-orbit-soft" onClick={() => { setBlockMode(false); openBlockForm(proFilter, null, null) }}>Dia inteiro / formulário</button>
+                  <button type="button" className="rounded-md px-2.5 py-1.5 font-medium hover:bg-ink/5" onClick={() => setBlockMode(false)}>Cancelar</button>
+                </span>
+              </div>
+            )}
+            <DayTimeline date={date} today={today} appointments={daily} professionals={proGroups} blocks={blocks} hours={hoursToday} tz={tz} blockMode={blockMode}
+              onOpen={setDetail} onOpenBlock={setBlockDetail} onCreate={openAt} onMove={(a, pro, start) => void requestMove(a, pro, start)} onBlockRange={onBlockRange} />
           </section>
         ) : (
           <section aria-label="Agenda semanal" className="overflow-hidden rounded-xl border border-hairline bg-white shadow-[0_1px_2px_rgb(17_20_26/0.04)]">
@@ -512,6 +422,18 @@ export default function AgendaPage() {
 
       {detail && (
         <ApptDetails a={detail} tz={tz} busyId={busyId} onClose={() => setDetail(null)} onEdit={editFromDetail} onAction={actFromDetail} />
+      )}
+      {blockDetail && options && (
+        <BlockDetails b={blockDetail} tz={tz} professionals={options.professionals} estId={est.id} onClose={() => setBlockDetail(null)} onEdit={editBlock}
+          onRemoved={() => { setBlockDetail(null); notify('Bloqueio removido.'); void load() }} />
+      )}
+      {blockModal && options && (
+        <BlockModal estId={est.id} tz={tz} options={options} initial={blockModal.form} id={blockModal.id} onClose={() => setBlockModal(null)}
+          onSaved={() => { setBlockModal(null); notify('Horário bloqueado.'); void load() }} />
+      )}
+      {move && (
+        <MoveModal m={move} fromTime={`${zoned(move.a.starts_at, tz).time}`} fromProfessional={move.a.professional_name}
+          onClose={() => setMove(null)} onConfirm={() => void confirmMove()} />
       )}
       {modal && options && (
         <AppointmentModal estId={est.id} tz={tz} options={options} initial={modal.form} original={modal.original}

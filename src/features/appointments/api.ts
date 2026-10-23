@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import type { ScheduleBlock } from '@/lib/schedule'
 
 export type AppointmentStatus = 'scheduled' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
 
@@ -111,4 +112,23 @@ export const NEXT_STATUS: Record<AppointmentStatus, AppointmentStatus[]> = {
   scheduled: ['confirmed', 'completed', 'cancelled', 'no_show'],
   confirmed: ['completed', 'cancelled', 'no_show'],
   completed: [], cancelled: [], no_show: [],
+}
+
+export interface WorkSegment { professional_id: string; weekday: number; start_time: string; end_time: string }
+
+/** Expediente real de todos os profissionais (somente leitura; usado para sombrear "fora do expediente"). */
+export async function loadWorkingSegments(establishmentId: string): Promise<WorkSegment[]> {
+  const { data, error } = await supabase.from('working_hours').select('professional_id, weekday, start_time, end_time').eq('establishment_id', establishmentId)
+  if (error) throw error
+  return (data ?? []) as WorkSegment[]
+}
+
+/** Bloqueios/folgas/férias que tocam o período (datas inclusivas; com folga de 2 dias para o fuso, recortado depois na tela). */
+export async function listBlocksInRange(establishmentId: string, from: string, to: string): Promise<ScheduleBlock[]> {
+  const lo = new Date(`${from}T00:00:00Z`); lo.setUTCDate(lo.getUTCDate() - 1)
+  const hi = new Date(`${to}T00:00:00Z`); hi.setUTCDate(hi.getUTCDate() + 2)
+  const { data, error } = await supabase.from('schedule_blocks').select('id, professional_id, kind, starts_at, ends_at, reason')
+    .eq('establishment_id', establishmentId).lt('starts_at', hi.toISOString()).gt('ends_at', lo.toISOString()).order('starts_at').limit(500)
+  if (error) throw error
+  return (data ?? []) as ScheduleBlock[]
 }
