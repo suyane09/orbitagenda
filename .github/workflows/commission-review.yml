@@ -3,10 +3,14 @@ on:
   push:
     branches:
       - 'feature/commission-2c-panel-review'
+      - 'feat/owner-business-reports'
   pull_request:
     paths:
       - 'src/features/commissions/**'
       - 'src/features/finance/**'
+      - 'src/features/reports/**'
+      - 'src/App.tsx'
+      - 'src/components/ui/Icon.tsx'
       - 'src/lib/**'
       - 'README.md'
       - 'supabase/migrations/**'
