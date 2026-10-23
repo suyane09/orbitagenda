@@ -12,6 +12,7 @@ const operation: NavEntry[] = [
   { label: 'Visão geral', to: '/app', icon: 'home', end: true },
   { label: 'Agenda', to: '/app/agenda', icon: 'calendar' },
   { label: 'Clientes', to: '/app/clientes', icon: 'users' },
+  { label: 'Financeiro', to: '/app/financeiro', icon: 'cash' },
 ]
 const catalog: NavEntry[] = [
   { label: 'Serviços', to: '/app/servicos', icon: 'service' },
