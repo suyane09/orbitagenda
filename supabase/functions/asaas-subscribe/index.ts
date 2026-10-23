@@ -13,7 +13,7 @@ const reply = (status: number, message: string, extras: Record<string, unknown> 
   new Response(JSON.stringify({ message, ...extras }), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
 const uuid = (x: unknown): x is string => typeof x === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x)
 const cpfCnpj = (x: unknown): x is string => typeof x === 'string' && /^(\d{11}|\d{14})$/.test(x)
-const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
+const getAdmin = () => createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
 
 async function requestAsaas(endpoint: string, method: string, data?: Record<string, unknown>) {
   const response = await fetch(apiBase + endpoint, {
@@ -45,6 +45,7 @@ Deno.serve(async req => {
   if (req.headers.get('origin') && req.headers.get('origin') !== allowedOrigin) return reply(403, 'Origem não permitida.')
   const jwt = req.headers.get('authorization')?.replace(/^Bearer\s+/i,'')
   if (!jwt) return reply(401, 'Entre na sua conta.')
+  const admin = getAdmin()
   const { data: auth, error: authError } = await admin.auth.getUser(jwt)
   if (authError || !auth.user?.id) return reply(401, 'Sessão inválida.')
   const payload = await req.json().catch(() => null)
