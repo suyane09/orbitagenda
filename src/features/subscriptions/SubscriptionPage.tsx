@@ -23,6 +23,7 @@ export default function SubscriptionPage() {
   const [plan,setPlan] = useState<Plan | null>(null)
   const [loading,setLoading] = useState(true)
   const [error,setError] = useState('')
+  const [refreshing,setRefreshing] = useState(false)
   const load = useCallback(async()=>{
     if(!owner||!id) {setLoading(false);return}
     setLoading(true);setError('')
@@ -43,36 +44,64 @@ export default function SubscriptionPage() {
   },[id,owner])
   useEffect(()=>{void load()},[load])
   if(!owner)return <p className="text-sm text-slate">Área disponível apenas para o proprietário.</p>
-  return <div className="mx-auto max-w-4xl space-y-5 pb-12">
-    <header><p className="text-xs font-semibold uppercase tracking-widest text-slate">Minha conta</p>
-      <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">Plano e assinatura</h1>
-      <p className="mt-2 text-sm text-slate">Acompanhe a situação contratual do seu estabelecimento.</p>
+  const statusTone = sub?.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : sub?.status === 'trialing' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-paper text-slate border-hairline'
+  return <div className="mx-auto max-w-5xl space-y-6 pb-14">
+    <header className="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[.18em] text-slate">Financeiro · Assinatura</p>
+        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Seu plano, com tudo às claras.</h1>
+        <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate">Consulte sua mensalidade, acompanhe o status e gerencie a contratação com segurança.</p>
+      </div>
+      <button type="button" disabled={loading||refreshing} onClick={async()=>{setRefreshing(true);try{await load()}finally{setRefreshing(false)}}} className="rounded-xl border border-hairline bg-surface px-4 py-2.5 text-sm font-medium transition hover:bg-paper disabled:opacity-50">↻ Atualizar dados</button>
     </header>
     {error&&<p role="alert" className="rounded-xl bg-danger-soft p-4 text-sm text-danger">{error}</p>}
-    <section className="rounded-xl border border-hairline bg-surface p-6">
-      {loading?<p className="text-sm text-slate">Carregando informações…</p>:
-      !sub?<div><h2 className="font-display text-xl font-semibold">Acesso ainda não vinculado a um plano</h2>
-        <p className="mt-2 text-sm leading-relaxed text-slate">Seu cadastro existe, mas ainda não há uma assinatura comercial atribuída. Entre em contato com a administração para definir um plano. Nenhuma cobrança foi gerada automaticamente.</p></div>:
-      <div className="space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><p className="text-sm text-slate">Plano atual</p>
-            <h2 className="mt-1 font-display text-2xl font-semibold">{plan?.name ?? 'Plano cadastrado'}</h2></div>
-          <span className="rounded-full bg-paper px-4 py-2 text-sm font-semibold">{names[sub.status]??sub.status}</span>
+    {loading?<section className="rounded-2xl border border-hairline bg-surface p-8 text-sm text-slate" role="status">Carregando seu plano…</section>:
+    !sub?<section className="rounded-2xl border border-hairline bg-surface p-8">
+      <span className="rounded-full bg-paper px-3 py-1 text-xs font-semibold text-slate">Aguardando atribuição</span>
+      <h2 className="mt-5 font-display text-2xl font-semibold">Seu plano ainda não foi atribuído</h2>
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate">Seu estabelecimento já está cadastrado. A administração precisa atribuir um plano antes da contratação. Nenhuma cobrança é criada automaticamente.</p>
+    </section>:
+    <>
+      <section className="overflow-hidden rounded-2xl border border-hairline bg-surface">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-hairline p-6 sm:p-8">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[.16em] text-slate">Seu plano atual</p>
+            <h2 className="mt-2 font-display text-3xl font-semibold">{plan?.name ?? 'Plano cadastrado'}</h2>
+            <p className="mt-2 text-sm text-slate">Gestão do seu estabelecimento em um só lugar.</p>
+          </div>
+          <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold ${statusTone}`}>{names[sub.status]??sub.status}</span>
         </div>
-        <div className="grid gap-4 border-t border-hairline pt-5 sm:grid-cols-2">
-          <div><p className="text-xs text-slate">Valor de referência mensal</p>
-            <p className="mt-1 font-display text-xl font-semibold">{plan?.monthly_price_cents==null?'A definir':formatBRL(plan.monthly_price_cents)}</p></div>
-          <div><p className="text-xs text-slate">Fim do período registrado</p>
-            <p className="mt-1 font-display text-xl font-semibold">{sub.current_period_end
-              ? new Date(sub.current_period_end).toLocaleDateString('pt-BR')
-              : 'Não informado'}</p></div>
+        <div className="grid gap-0 sm:grid-cols-2">
+          <div className="border-b border-hairline p-6 sm:border-b-0 sm:border-r sm:p-8">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate">Mensalidade</p>
+            <div className="mt-3 flex items-baseline gap-2">
+              <span className="font-display text-4xl font-semibold tracking-tight">{plan?.monthly_price_cents==null?'A definir':formatBRL(plan.monthly_price_cents)}</span>
+              {plan?.monthly_price_cents!=null&&<span className="text-sm text-slate">/ mês</span>}
+            </div>
+            <p className="mt-2 text-xs text-slate">Valor definido pelo plano contratado.</p>
+          </div>
+          <div className="p-6 sm:p-8">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate">Fim do período registrado</p>
+            <p className="mt-3 font-display text-2xl font-semibold">{sub.current_period_end ? new Date(sub.current_period_end).toLocaleDateString('pt-BR') : 'Ainda não definido'}</p>
+            <p className="mt-2 text-xs text-slate">A confirmação do pagamento pode levar alguns instantes.</p>
+          </div>
         </div>
-        {sub.notes&&<p className="rounded-lg bg-paper p-3 text-sm text-slate">{sub.notes}</p>}
-        <p className="text-xs leading-relaxed text-slate">O Asaas gera as cobranças recorrentes apenas quando uma assinatura é criada no provedor. A situação contratual pode levar alguns instantes para refletir o pagamento. O painel não bloqueia o acesso automaticamente por inadimplência.</p>
-      </div>}
-    </section>
-    {!loading && sub && plan?.monthly_price_cents != null && plan.monthly_price_cents > 0 && <AsaasBillingPanel establishmentId={id}
-      planPrice={plan.monthly_price_cents} linked={!!sub.asaas_subscription_id}
-      provisioning={!!sub.asaas_provisioning_started_at} onFinished={load}/>}
+        {sub.notes&&<p className="mx-6 mb-6 rounded-xl bg-paper px-4 py-3 text-sm leading-relaxed text-slate sm:mx-8">{sub.notes}</p>}
+      </section>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(240px,.65fr)]">
+        {plan?.monthly_price_cents != null && plan.monthly_price_cents > 0
+          ? <AsaasBillingPanel establishmentId={id} planPrice={plan.monthly_price_cents} linked={!!sub.asaas_subscription_id} provisioning={!!sub.asaas_provisioning_started_at} onFinished={load}/>
+          : <section className="rounded-2xl border border-hairline bg-surface p-6"><h3 className="font-display text-lg font-semibold">Contratação indisponível</h3><p className="mt-2 text-sm leading-relaxed text-slate">A administração ainda precisa definir o valor mensal deste plano.</p></section>}
+        <aside className="h-fit rounded-2xl border border-hairline bg-surface p-6">
+          <h3 className="font-display text-lg font-semibold">Como funciona</h3>
+          <ol className="mt-4 space-y-4 text-sm leading-relaxed text-slate">
+            <li><span className="mr-2 font-semibold text-foreground">01.</span> Confira o valor do seu plano.</li>
+            <li><span className="mr-2 font-semibold text-foreground">02.</span> Autorize a assinatura quando a contratação estiver disponível.</li>
+            <li><span className="mr-2 font-semibold text-foreground">03.</span> Acompanhe a confirmação do pagamento nesta página.</li>
+          </ol>
+          <p className="mt-5 border-t border-hairline pt-4 text-xs leading-relaxed text-slate">A inadimplência não bloqueia o acesso automaticamente. Em caso de divergência, procure o suporte antes de tentar contratar novamente.</p>
+        </aside>
+      </div>
+    </>}
   </div>
 }
