@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.118.0'
 
 const apiKey = Deno.env.get('ASAAS_API_KEY') ?? ''
 const webhookToken = Deno.env.get('ASAAS_WEBHOOK_TOKEN') ?? ''
