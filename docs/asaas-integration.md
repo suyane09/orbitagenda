@@ -20,6 +20,7 @@ Usar primeiro a conta [Asaas Sandbox](https://sandbox.asaas.com/). Documentaçã
    - `ASAAS_ENVIRONMENT` = `sandbox`.
    - `ASAAS_WEBHOOK_TOKEN` — token seguro e distinto da chave API, entre 32–255 caracteres.
    - `ASAAS_BILLING_ENABLED` = `false` inicialmente.
+   - `ASAAS_PRODUCTION_CONFIRMED` = `false`. Necessário mudar para `true` **apenas depois** da homologação e autorização explícita para iniciar cobranças reais.
    - `ASAAS_ALLOWED_ORIGIN` = `https://orbitagenda.vercel.app`.
    - `SUPABASE_URL`, `SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY` são segredos já fornecidos pela infraestrutura Supabase, verificar presença na versão utilizada.
 3. Configurar no Asaas um webhook com endereço final:
