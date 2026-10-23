@@ -39,7 +39,7 @@ export function CommissionSettingsModal({ establishmentId, professionalId, profe
    ]} />
    {mode !== 'none' && <TextField label={mode === 'percentage' ? 'Percentual (%)' : 'Valor por atendimento (R$)'} value={value}
     onChange={(e) => setValue(e.target.value)} inputMode="decimal" placeholder={mode === 'percentage' ? 'Ex.: 40' : 'Ex.: 12,00'} />}
-   <Alert tone="info">Esta etapa salva apenas a regra. Ainda não calcula nem paga comissões automaticamente.</Alert>
+   <Alert tone="info">A regra será usada nos próximos atendimentos concluídos. A comissão é calculada sobre os recebimentos registrados; repasses não são automáticos.</Alert>
   </form>
  </Modal>
 }

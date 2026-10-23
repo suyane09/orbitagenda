@@ -1,0 +1,53 @@
+name: Commission review checks
+on:
+  push:
+    branches:
+      - 'feature/commission-2c-panel-review'
+  pull_request:
+    paths:
+      - 'src/features/commissions/**'
+      - 'supabase/migrations/**'
+      - 'supabase/tests/**'
+      - 'src/components/layout/AppShell.tsx'
+      - 'package*.json'
+      - '.github/workflows/commission-review.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  db-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash supabase/tests/run.sh
