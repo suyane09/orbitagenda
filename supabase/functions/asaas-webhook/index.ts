@@ -4,7 +4,7 @@ const apiKey = Deno.env.get('ASAAS_API_KEY') ?? ''
 const webhookToken = Deno.env.get('ASAAS_WEBHOOK_TOKEN') ?? ''
 const environment = Deno.env.get('ASAAS_ENVIRONMENT') ?? 'sandbox'
 const apiBase = environment === 'production' ? 'https://api.asaas.com/v3' : 'https://api-sandbox.asaas.com/v3'
-const admin = createClient(Deno.env.get('SUPABASE_URL') ?? '',
+const getAdmin = () => createClient(Deno.env.get('SUPABASE_URL') ?? '',
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
   { auth:{ persistSession:false, autoRefreshToken:false } })
 const response = (status:number,message:string) => new Response(JSON.stringify({message}),
@@ -23,7 +23,8 @@ Deno.serve(async req=>{
   if(req.method!=='POST') return response(405,'method_not_allowed')
   if(!apiKey || !webhookToken || webhookToken.length<32
     || !['sandbox','production'].includes(environment)
-    || !Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) return response(503,'not_configured')
+    || !Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    || !Deno.env.get('SUPABASE_URL')) return response(503,'not_configured')
   const submitted=req.headers.get('asaas-access-token') ?? ''
   if(!submitted || !(await tokenMatches(submitted))) return response(401,'unauthorized')
   const raw=await req.text()
@@ -50,6 +51,7 @@ Deno.serve(async req=>{
   if(typeof actual.subscription!=='string' || !actual.subscription.startsWith('sub_')) return response(200,'ignored')
   if(typeof actual.status!=='string' || typeof actual.value!=='number'
     || !Number.isFinite(actual.value) || actual.value<0) return response(422,'invalid_payment')
+  const admin=getAdmin()
   const {data: linked, error: lookupError}=await admin.from('establishment_subscriptions')
     .select('establishment_id').eq('asaas_subscription_id',actual.subscription)
     .eq('asaas_environment',environment).maybeSingle()
