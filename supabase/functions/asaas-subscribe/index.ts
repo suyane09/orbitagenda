@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.118.0'
 
 const url = Deno.env.get('SUPABASE_URL') ?? ''
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -38,7 +38,8 @@ Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors })
   if (req.method !== 'POST') return reply(405, 'Método não permitido.')
   if (!url || !serviceKey || !publishable || !apiKey || !billingEnabled
-      || !['sandbox', 'production'].includes(environment)) {
+      || !['sandbox', 'production'].includes(environment)
+      || (environment === 'production' && Deno.env.get('ASAAS_PRODUCTION_CONFIRMED') !== 'true')) {
     return reply(503, 'Asaas ainda não foi configurado neste ambiente.')
   }
   if (req.headers.get('origin') && req.headers.get('origin') !== allowedOrigin) return reply(403, 'Origem não permitida.')
@@ -61,6 +62,7 @@ Deno.serve(async req => {
     .select('establishment_id,plan_id,status,asaas_subscription_id,asaas_provisioning_started_at')
     .eq('establishment_id',estId).maybeSingle()
   if (subError || !sub) return reply(409, 'Um plano precisa ser atribuído pela administração antes da contratação.')
+  if (!['trialing','active','past_due'].includes(sub.status)) return reply(409,'O plano está suspenso ou cancelado. Fale com a administração.')
   if (sub.asaas_subscription_id || sub.asaas_provisioning_started_at) {
     return reply(409, 'Assinatura já vinculada ou em conferência. Procure o suporte antes de tentar novamente.')
   }
