@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { Alert } from '@/components/ui/Alert'
 import { Button } from '@/components/ui/Button'
 import { SelectField, TextAreaField, TextField } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { Spinner } from '@/components/ui/Spinner'
-import { EmptyState, ErrorState } from '@/components/ui/States'
+import { ErrorState } from '@/components/ui/States'
 import { useToast } from '@/components/ui/Toast'
-import { ACTION_LABEL, STATUS_CHIP, STATUS_LABEL, addDays, dayLabel, groupByDate, isActive, weekDays, zoned } from '@/lib/agenda'
+import { ACTION_LABEL, STATUS_CHIP, STATUS_LABEL, addDays, dayLabel, groupByDate, isActive, layoutLanes, timeToMinutes, weekDays, zoned } from '@/lib/agenda'
 import { describeError } from '@/lib/errors'
 import { formatBRL, formatDuration } from '@/lib/money'
 import { todayInZone } from '@/lib/schedule'
@@ -138,122 +138,242 @@ function AppointmentModal({ estId, tz, options, initial, original, onClose, onSa
   )
 }
 
-// ---- Cartão de agendamento --------------------------------------------------------
-function ApptCard({ a, tz, compact, busyId, onEdit, onAction }: {
-  a: AppointmentRow; tz: string; compact?: boolean; busyId: string | null
-  onEdit: (a: AppointmentRow) => void; onAction: (a: AppointmentRow, s: AppointmentStatus) => void
-}) {
-  const started = new Date(a.starts_at).getTime() <= Date.now()
+// ---- Apresentação de status ---------------------------------------------------------
+const STATUS_DOT: Record<AppointmentStatus, string> = {
+  scheduled: 'bg-amber-500', confirmed: 'bg-orbit', completed: 'bg-emerald-600', cancelled: 'bg-slate/60', no_show: 'bg-danger',
+}
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('') || '·'
+
+// ---- Cartão compacto (visão semanal) ----------------------------------------------
+function ApptCard({ a, tz, onOpen }: { a: AppointmentRow; tz: string; onOpen: (a: AppointmentRow) => void }) {
   const range = `${zoned(a.starts_at, tz).time}–${zoned(a.ends_at, tz).time}`
-  if (compact) {
-    return (
-      <button type="button" onClick={() => onEdit(a)} style={{ borderLeftColor: a.professional_color }}
-        className={`block w-full rounded-lg border border-hairline border-l-[3px] bg-white px-2.5 py-2.5 text-left text-xs shadow-[0_1px_2px_rgb(17_20_26/0.04)] transition hover:border-orbit hover:shadow-sm ${a.status === 'cancelled' ? 'opacity-60' : ''}`}>
-        <span className="font-medium tabular-nums">{range}</span> <span className={`ml-1 rounded px-1 ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
-        <span className="mt-0.5 block truncate">{a.customer_name} · {a.service_name}</span>
-      </button>
-    )
-  }
   return (
-    <li style={{ borderLeftColor: a.professional_color }} className={`rounded-xl border border-l-[3px] border-hairline bg-surface p-4 shadow-[0_1px_2px_rgb(17_20_26/0.04)] transition hover:shadow-md sm:p-5 ${a.status === 'cancelled' ? 'opacity-70' : ''}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="font-medium"><span className="tabular-nums">{range}</span> · {a.customer_name}</p>
-          <p className="text-sm text-slate">{a.service_name} com {a.professional_name} · {formatBRL(a.price_cents)}{a.customer_phone ? ` · ${a.customer_phone}` : ''}</p>
-          {a.notes && <p className="mt-1 text-sm text-graphite">{a.notes}</p>}
-        </div>
-        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
-      </div>
-      {(isActive(a.status)) && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {NEXT_STATUS[a.status].map((s) => (
-            <Button key={s} variant={s === 'confirmed' ? 'accent' : 'outline'} className="h-9 px-3"
-              disabled={busyId === a.id || ((s === 'completed' || s === 'no_show') && !started)}
-              title={(s === 'completed' || s === 'no_show') && !started ? 'Disponível após o horário de início' : undefined}
-              onClick={() => onAction(a, s)}>{ACTION_LABEL[s]}</Button>
-          ))}
-          <Button variant="ghost" className="h-9 px-3" disabled={busyId === a.id} onClick={() => onEdit(a)}>Editar</Button>
-        </div>
-      )}
-    </li>
+    <button type="button" onClick={() => onOpen(a)} style={{ borderLeftColor: a.professional_color }}
+      className={`block w-full rounded-lg border border-hairline border-l-[3px] bg-white px-2.5 py-2.5 text-left text-xs shadow-[0_1px_2px_rgb(17_20_26/0.04)] transition hover:border-orbit hover:shadow-sm ${a.status === 'cancelled' ? 'opacity-60' : ''}`}>
+      <span className="font-medium tabular-nums">{range}</span> <span className={`ml-1 rounded px-1 ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
+      <span className="mt-0.5 block truncate">{a.customer_name} · {a.service_name}</span>
+    </button>
   )
 }
 
-// Grade de atendimentos: a escala representa horas, não disponibilidade.
-// Blocos e durações são calculados exclusivamente dos agendamentos reais.
-function DayTimeline({ appointments, professionals, tz, busyId, onEdit, onAction, onCreate }: {
+// ---- Detalhes e ações (abre ao clicar em um agendamento) ------------------------------
+function ApptDetails({ a, tz, busyId, onClose, onEdit, onAction }: {
+  a: AppointmentRow; tz: string; busyId: string | null
+  onClose: () => void; onEdit: (a: AppointmentRow) => void; onAction: (a: AppointmentRow, s: AppointmentStatus) => void
+}) {
+  const started = new Date(a.starts_at).getTime() <= Date.now()
+  const start = zoned(a.starts_at, tz)
+  const rows: Array<[string, string]> = [
+    ['Serviço', a.service_name],
+    ['Profissional', a.professional_name],
+    ['Data', `${dayLabel(start.date)} · ${start.time}–${zoned(a.ends_at, tz).time}`],
+    ['Valor', formatBRL(a.price_cents)],
+    ...(a.customer_phone ? [['Telefone', a.customer_phone] as [string, string]] : []),
+  ]
+  return (
+    <Modal title="Detalhes do agendamento" onClose={onClose}
+      footer={<>
+        <Button variant="outline" onClick={onClose}>Fechar</Button>
+        <Button variant="accent" onClick={() => onEdit(a)}>Editar</Button>
+      </>}>
+      <div className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold text-white" style={{ backgroundColor: a.professional_color }}>{initials(a.customer_name)}</span>
+            <p className="min-w-0 break-words font-display text-lg font-semibold leading-tight">{a.customer_name}</p>
+          </div>
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
+        </div>
+        <dl className="divide-y divide-hairline rounded-control border border-hairline text-sm">
+          {rows.map(([k, v]) => (
+            <div key={k} className="flex justify-between gap-4 px-3.5 py-2.5"><dt className="text-slate">{k}</dt><dd className="min-w-0 text-right font-medium">{v}</dd></div>
+          ))}
+        </dl>
+        {a.notes && <p className="rounded-control bg-paper px-3.5 py-2.5 text-sm text-graphite">{a.notes}</p>}
+        {isActive(a.status) && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate">Ações</p>
+            <div className="flex flex-wrap gap-2">
+              {NEXT_STATUS[a.status].map((s) => (
+                <Button key={s} variant={s === 'confirmed' ? 'accent' : 'outline'} className="h-9 px-3"
+                  disabled={busyId === a.id || ((s === 'completed' || s === 'no_show') && !started)}
+                  title={(s === 'completed' || s === 'no_show') && !started ? 'Disponível após o horário de início' : undefined}
+                  onClick={() => onAction(a, s)}>{ACTION_LABEL[s]}</Button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+// ---- Grade do dia -------------------------------------------------------------------
+// A escala representa horas, não disponibilidade. Blocos e durações vêm só dos agendamentos reais;
+// a disponibilidade de verdade é validada no modal (RPC get_available_slots) e no banco.
+const HOUR_H = 72          // 36px por 30 min
+const TIME_W = 60
+const COL_MIN = 176
+const LINE_HOUR = '#e6e9ef'
+const LINE_HALF = '#f1f3f6'
+
+function DayTimeline({ date, today, appointments, professionals, tz, onOpen, onCreate }: {
+  date: string
+  today: string
   appointments: AppointmentRow[]
   professionals: AgendaOptions['professionals']
   tz: string
-  busyId: string | null
-  onEdit: (a: AppointmentRow) => void
-  onAction: (a: AppointmentRow, s: AppointmentStatus) => void
+  onOpen: (a: AppointmentRow) => void
   onCreate: (professionalId: string, time: string) => void
 }) {
-  const minutes = (iso: string) => {
-    const t = zoned(iso, tz).time
-    const [h, m] = t.split(':').map(Number)
-    return h * 60 + m
-  }
-  const minStart = appointments.length ? Math.min(...appointments.map((a) => minutes(a.starts_at))) : 8 * 60
-  const maxEnd = appointments.length ? Math.max(...appointments.map((a) => minutes(a.ends_at))) : 19 * 60
+  const scroller = useRef<HTMLDivElement>(null)
+  const [nowMin, setNowMin] = useState<number | null>(null)
+  useEffect(() => {
+    if (date !== today) { setNowMin(null); return }
+    const tick = () => setNowMin(timeToMinutes(zoned(new Date().toISOString(), tz).time))
+    tick()
+    const t = setInterval(tick, 60_000)
+    return () => clearInterval(t)
+  }, [date, today, tz])
+
+  const items = useMemo(() => appointments.map((a) => {
+    const start = timeToMinutes(zoned(a.starts_at, tz).time)
+    const dur = Math.max(15, Math.round((new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000))
+    return { a, start, end: Math.min(24 * 60, start + dur), dur }
+  }), [appointments, tz])
+
+  const minStart = items.length ? Math.min(...items.map((i) => i.start)) : 8 * 60
+  const maxEnd = items.length ? Math.max(...items.map((i) => i.end)) : 19 * 60
   const startHour = Math.max(0, Math.min(8, Math.floor(minStart / 60)))
   const endHour = Math.min(24, Math.max(20, Math.ceil(maxEnd / 60)))
-  const hourHeight = 64
-  const height = (endHour - startHour) * hourHeight
-  const hourLabels = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i)
-  const columns = professionals.length ? professionals : [{ id: 'unassigned', name: 'Atendimentos', color: '#4435d7' }]
+  const height = (endHour - startHour) * HOUR_H
+  const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i)
+  const y = (min: number) => ((min - startHour * 60) / 60) * HOUR_H
+  const columns = professionals.length ? professionals : [{ id: 'unassigned', name: 'Atendimentos', color: '#3b36d9' }]
+  const template = `${TIME_W}px repeat(${columns.length}, minmax(${COL_MIN}px, 1fr))`
+  const minWidth = TIME_W + columns.length * COL_MIN
+
+  // Leva o scroll para o primeiro atendimento (ou para "agora") ao trocar de dia.
+  useEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const anchor = items.length ? minStart : nowMin ?? startHour * 60
+    el.scrollTop = Math.max(0, y(anchor) - HOUR_H)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, items.length])
+
   return (
-    <div className="overflow-x-auto" aria-label="Grade de horários por profissional">
-      <div style={{ minWidth: Math.max(560, columns.length * 210 + 70) }}>
-        <div className="sticky top-0 z-20 grid border-b border-hairline bg-white" style={{ gridTemplateColumns: `70px repeat(${columns.length}, minmax(0, 1fr))` }}>
-          <div className="flex items-center justify-center border-r border-hairline py-4 text-[11px] font-medium uppercase tracking-wider text-slate">Hora</div>
-          {columns.map((pro) => <div key={pro.id} className="flex items-center gap-2 border-r border-hairline px-4 py-4 last:border-r-0">
-            <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: pro.color }} />
-            <span className="truncate text-sm font-semibold">{pro.name}</span>
-            <span className="ml-auto text-xs tabular-nums text-slate">{appointments.filter((a) => pro.id === 'unassigned' || a.professional_id === pro.id).length}</span>
-          </div>)}
-        </div>
-        <div className="grid" style={{ gridTemplateColumns: `70px repeat(${columns.length}, minmax(0, 1fr))` }}>
-          <div className="relative border-r border-hairline bg-[#fafbfe]" style={{ height }}>
-            {hourLabels.map((hour, i) => <span key={hour} className="absolute right-3 -translate-y-1/2 text-[11px] tabular-nums text-slate" style={{ top: i * hourHeight + (i === 0 ? 9 : 0) }}>{String(hour).padStart(2, '0')}:00</span>)}
+    <div>
+      <div ref={scroller} role="region" aria-label="Grade de horários por profissional" tabIndex={0}
+        className="max-h-[min(76dvh,860px)] overflow-auto overscroll-contain">
+        <div style={{ minWidth }}>
+          {/* Cabeçalho dos profissionais */}
+          <div className="sticky top-0 z-30 grid border-b border-hairline bg-white/95 backdrop-blur" style={{ gridTemplateColumns: template }}>
+            <div className="sticky left-0 z-10 border-r border-[#eceff3] bg-white" />
+            {columns.map((pro) => {
+              const count = appointments.filter((a) => pro.id === 'unassigned' || a.professional_id === pro.id).length
+              return (
+                <div key={pro.id} className="flex min-w-0 items-center gap-2.5 border-l border-[#eceff3] px-3 py-3 first:border-l-0">
+                  <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white" style={{ backgroundColor: pro.color }}>{initials(pro.name)}</span>
+                  <span className="min-w-0 leading-tight">
+                    <span className="block truncate text-sm font-semibold">{pro.name}</span>
+                    <span className="block text-[11px] text-slate">{count === 0 ? 'Sem atendimentos' : `${count} ${count === 1 ? 'atendimento' : 'atendimentos'}`}</span>
+                  </span>
+                </div>
+              )
+            })}
           </div>
-          {columns.map((pro) => {
-            const appts = appointments.filter((a) => pro.id === 'unassigned' || a.professional_id === pro.id)
-            return <div key={pro.id} className="relative border-r border-hairline last:border-r-0" style={{ height }}>
-              {hourLabels.slice(0, -1).map((hour) => (
-                <div key={hour} className="absolute inset-x-0 border-t border-[#edf0f5]" style={{ top: (hour - startHour) * hourHeight, height: hourHeight }}>
-                  {[0, 30].map((minute) => {
-                    const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-                    return <button key={minute} type="button" aria-label={`Novo agendamento com ${pro.name} às ${time}. Disponibilidade verificada após escolher o serviço.`}
-                      title={`Criar agendamento às ${time} — disponibilidade sujeita à escolha do serviço`}
-                      onClick={() => onCreate(pro.id, time)}
-                      className="group absolute inset-x-0 flex h-1/2 items-center justify-center text-xs text-orbit/0 transition-colors hover:bg-orbit-soft/50 hover:text-orbit focus-visible:z-20 focus-visible:bg-orbit-soft focus-visible:text-orbit focus-visible:outline-2 focus-visible:outline-orbit"
-                      style={{ top: minute === 0 ? 0 : '50%' }}>
-                      <span className="pointer-events-none rounded-md bg-white/90 px-2 py-1 font-medium shadow-sm opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">+ {time}</span>
-                    </button>
+
+          {/* Corpo */}
+          <div className="grid" style={{ gridTemplateColumns: template }}>
+            <div className="sticky left-0 z-20 border-r border-[#eceff3] bg-white" style={{ height }}>
+              <div className="relative" style={{ height }}>
+                {hours.map((h, i) => (
+                  <span key={h} className="absolute right-2.5 text-[11px] tabular-nums text-slate" style={{ top: i * HOUR_H + (i === 0 ? 4 : -7) }}>{String(h).padStart(2, '0')}:00</span>
+                ))}
+              </div>
+            </div>
+            {columns.map((pro) => {
+              const mine = items.filter((i) => pro.id === 'unassigned' || i.a.professional_id === pro.id)
+              const lanes = layoutLanes(mine)
+              return (
+                <div key={pro.id} className="relative border-l border-[#eceff3] first:border-l-0" style={{
+                  height,
+                  backgroundImage: `linear-gradient(${LINE_HOUR} 1px, transparent 1px), linear-gradient(${LINE_HALF} 1px, transparent 1px)`,
+                  backgroundSize: `100% ${HOUR_H}px, 100% ${HOUR_H}px`,
+                  backgroundPosition: `0 0, 0 ${HOUR_H / 2}px`,
+                }}>
+                  {/* Faixas clicáveis de 30 min */}
+                  {hours.flatMap((h) => [0, 30].map((m) => {
+                    const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+                    return (
+                      <button key={time} type="button" onClick={() => onCreate(pro.id, time)}
+                        aria-label={`Novo agendamento com ${pro.name} às ${time}`}
+                        title={`Novo agendamento às ${time}`}
+                        className="group absolute inset-x-0 flex items-center justify-center transition-colors hover:bg-orbit-soft/60 focus-visible:z-10 focus-visible:bg-orbit-soft focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-orbit"
+                        style={{ top: y(h * 60 + m), height: HOUR_H / 2 }}>
+                        <span className="pointer-events-none rounded-full bg-white px-2 py-0.5 text-[11px] font-medium tabular-nums text-orbit opacity-0 shadow-sm ring-1 ring-orbit/15 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">+ {time}</span>
+                      </button>
+                    )
+                  }))}
+
+                  {/* Agora */}
+                  {nowMin !== null && nowMin >= startHour * 60 && nowMin <= endHour * 60 && (
+                    <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 z-20 h-px bg-danger/70" style={{ top: y(nowMin) }}>
+                      <span className="absolute -left-1 -top-[3px] size-[7px] rounded-full bg-danger" />
+                    </div>
+                  )}
+
+                  {/* Agendamentos */}
+                  {mine.map((it, idx) => {
+                    const { a } = it
+                    const { lane, lanes: n } = lanes[idx]!
+                    const h = Math.max(22, (it.dur / 60) * HOUR_H - 3)
+                    const time = zoned(a.starts_at, tz).time
+                    const range = `${time}–${zoned(a.ends_at, tz).time}`
+                    const dead = a.status === 'cancelled'
+                    return (
+                      <button key={a.id} type="button" onClick={() => onOpen(a)}
+                        title={`${range} · ${a.customer_name} · ${a.service_name} · ${STATUS_LABEL[a.status]}`}
+                        aria-label={`${range}, ${a.customer_name}, ${a.service_name}, ${STATUS_LABEL[a.status]}`}
+                        style={{
+                          top: y(it.start) + 1.5, height: h,
+                          left: `calc(${(lane / n) * 100}% + 3px)`, width: `calc(${100 / n}% - 6px)`,
+                          borderLeftColor: a.professional_color,
+                          backgroundColor: `color-mix(in srgb, ${a.professional_color} 13%, white)`,
+                        }}
+                        className={`absolute z-10 overflow-hidden rounded-lg border border-l-[3px] border-black/[0.06] px-2 text-left text-xs leading-tight shadow-[0_1px_2px_rgb(17_20_26/0.06)] transition hover:z-20 hover:shadow-md focus-visible:z-20 ${h < 44 ? 'py-0.5' : 'py-1.5'} ${dead ? 'opacity-55' : ''}`}>
+                        {h < 44 ? (
+                          <span className="flex h-full items-center gap-1.5">
+                            <span className="truncate"><span className="font-semibold tabular-nums">{time}</span> <span className={`font-medium ${dead ? 'line-through' : ''}`}>{a.customer_name}</span></span>
+                            <span aria-hidden="true" className={`ml-auto size-2 shrink-0 rounded-full ${STATUS_DOT[a.status]}`} />
+                          </span>
+                        ) : (
+                          <>
+                            <span className="flex items-center gap-1.5">
+                              <span className={`truncate font-semibold ${dead ? 'line-through' : ''}`}>{a.customer_name}</span>
+                              {h < 64 && <span aria-hidden="true" className={`ml-auto size-2 shrink-0 rounded-full ${STATUS_DOT[a.status]}`} />}
+                            </span>
+                            <span className="mt-0.5 block truncate text-graphite/80">{a.service_name}</span>
+                            {h >= 64 && (
+                              <span className="mt-1 flex items-center gap-1.5">
+                                <span className="truncate tabular-nums text-slate">{range}</span>
+                                <span className={`ml-auto shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium ${STATUS_CHIP[a.status]}`}>{STATUS_LABEL[a.status]}</span>
+                              </span>
+                            )}
+                          </>
+                        )}
+                        {(h < 64) && <span className="sr-only"> {range}, {STATUS_LABEL[a.status]}</span>}
+                      </button>
+                    )
                   })}
                 </div>
-              ))}
-              {appts.map((a) => {
-                const top = (minutes(a.starts_at) - startHour * 60) / 60 * hourHeight
-                const duration = Math.max(15, (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000)
-                const blockHeight = Math.max(35, duration / 60 * hourHeight)
-                return <button key={a.id} type="button" onClick={() => onEdit(a)}
-                  title={`${a.customer_name} · ${a.service_name} · ${STATUS_LABEL[a.status]}`}
-                  style={{ top, height: blockHeight, borderLeftColor: pro.color }}
-                  className={`absolute left-1 right-1 z-10 overflow-hidden rounded-md border border-l-[3px] border-[#deddf6] bg-[#f2f0ff] px-2 py-1.5 text-left text-xs shadow-sm transition hover:z-20 hover:border-orbit hover:shadow-md focus-visible:z-20 focus-visible:outline-2 focus-visible:outline-orbit ${a.status === 'cancelled' ? 'opacity-55' : ''}`}>
-                  <span className="block truncate font-semibold tabular-nums text-[#332a86]">{zoned(a.starts_at, tz).time} · {a.customer_name}</span>
-                  {blockHeight >= 55 && <span className="mt-0.5 block truncate text-[#554b8c]">{a.service_name}</span>}
-                  {blockHeight >= 75 && <span className="mt-1 inline-block rounded bg-white/80 px-1.5 py-0.5 text-[10px] font-medium text-[#554b8c]">{STATUS_LABEL[a.status]}</span>}
-                </button>
-              })}
-              {!appts.length && <span className="absolute inset-x-2 top-6 text-center text-[11px] text-slate">Sem agendamentos</span>}
-            </div>
-          })}
+              )
+            })}
+          </div>
         </div>
-        <div className="border-t border-hairline bg-[#fafbfe] px-4 py-2 text-xs text-slate">Clique em uma faixa de horário para iniciar um agendamento. A disponibilidade real será verificada após escolher o serviço.</div>
       </div>
+      <p className="border-t border-hairline bg-[#fafbfe] px-4 py-2 text-xs text-slate">Toque em um horário vazio para agendar; a disponibilidade é conferida depois de escolher o serviço.</p>
     </div>
   )
 }
@@ -273,6 +393,7 @@ export default function AgendaPage() {
   const [options, setOptions] = useState<AgendaOptions | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [modal, setModal] = useState<{ form: FormState; original: AppointmentRow | null } | null>(null)
+  const [detail, setDetail] = useState<AppointmentRow | null>(null)
   const [confirmCancel, setConfirmCancel] = useState<AppointmentRow | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -313,12 +434,14 @@ export default function AgendaPage() {
     finally { setBusyId(null); setConfirmCancel(null) }
   }
   const onAction = (a: AppointmentRow, s: AppointmentStatus) => (s === 'cancelled' ? setConfirmCancel(a) : void changeStatus(a, s))
+  const actFromDetail = (a: AppointmentRow, s: AppointmentStatus) => { setDetail(null); onAction(a, s) }
+  const editFromDetail = (a: AppointmentRow) => { setDetail(null); openEdit(a) }
 
   const proGroups = options?.professionals.filter((p) => !proFilter || p.id === proFilter) ?? []
   const daily = byDay[date] ?? []
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6 lg:py-8">
+    <div className="mx-auto max-w-7xl space-y-5 px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-6 sm:px-6 lg:pt-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-orbit">Operação / Agendamentos</p>
@@ -367,11 +490,7 @@ export default function AgendaPage() {
               <div><h2 className="font-display text-base font-semibold">Atendimentos do dia</h2><p className="mt-0.5 text-xs text-slate">{daily.length} {daily.length === 1 ? 'agendamento' : 'agendamentos'} nos filtros selecionados</p></div>
               <button type="button" onClick={() => openNew(date)} disabled={!options} className="rounded-lg px-3 py-2 text-sm font-medium text-orbit hover:bg-orbit-soft disabled:opacity-50">+ Adicionar</button>
             </div>
-            <DayTimeline appointments={daily} professionals={proGroups} tz={tz} busyId={busyId} onEdit={openEdit} onAction={onAction} onCreate={openAt} />
-            {daily.length > 0 && <div className="border-t border-hairline p-4 sm:p-5">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate">Detalhes e ações</h3>
-              <ul className="space-y-2">{daily.map((a) => <ApptCard key={a.id} a={a} tz={tz} busyId={busyId} onEdit={openEdit} onAction={onAction} />)}</ul>
-            </div>}
+            <DayTimeline date={date} today={today} appointments={daily} professionals={proGroups} tz={tz} onOpen={setDetail} onCreate={openAt} />
           </section>
         ) : (
           <section aria-label="Agenda semanal" className="overflow-hidden rounded-xl border border-hairline bg-white shadow-[0_1px_2px_rgb(17_20_26/0.04)]">
@@ -383,7 +502,7 @@ export default function AgendaPage() {
                     <button type="button" className={`text-left text-xs font-semibold capitalize hover:text-orbit ${d === today ? 'text-orbit' : 'text-graphite'}`} onClick={() => { setDate(d); setView('day') }}>{dayLabel(d, 'short')}</button>
                     <button type="button" aria-label={`Novo agendamento em ${dayLabel(d)}`} className="grid size-7 shrink-0 place-items-center rounded-md text-orbit hover:bg-orbit-soft" onClick={() => openNew(d)}>+</button>
                   </div>
-                  <div className="space-y-2">{(byDay[d] ?? []).map((a) => <ApptCard key={a.id} a={a} tz={tz} compact busyId={busyId} onEdit={openEdit} onAction={onAction} />)}
+                  <div className="space-y-2">{(byDay[d] ?? []).map((a) => <ApptCard key={a.id} a={a} tz={tz} onOpen={setDetail} />)}
                     {!(byDay[d] ?? []).length && <p className="py-4 text-center text-[11px] text-slate">Sem agendamentos</p>}</div>
                 </div>
               ))}
@@ -391,6 +510,9 @@ export default function AgendaPage() {
           </section>
         )}
 
+      {detail && (
+        <ApptDetails a={detail} tz={tz} busyId={busyId} onClose={() => setDetail(null)} onEdit={editFromDetail} onAction={actFromDetail} />
+      )}
       {modal && options && (
         <AppointmentModal estId={est.id} tz={tz} options={options} initial={modal.form} original={modal.original}
           onClose={() => setModal(null)} onSaved={() => { setModal(null); notify('Agendamento salvo.'); void load() }} />

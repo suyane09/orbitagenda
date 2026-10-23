@@ -47,3 +47,36 @@ export function groupByDate<T extends { starts_at: string }>(rows: readonly T[],
   for (const r of rows) (out[zoned(r.starts_at, timeZone).date] ??= []).push(r)
   return out
 }
+
+/** Minutos desde 00:00 de um "HH:MM". */
+export function timeToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number) as [number, number]
+  return h * 60 + m
+}
+
+export interface LaneItem { start: number; end: number }
+export interface LanePlacement { lane: number; lanes: number }
+
+/**
+ * Distribui itens que se sobrepõem no tempo (mesmo profissional) em faixas lado a lado.
+ * Itens sem sobreposição ocupam a largura toda (lanes = 1). Devolve um resultado por índice de entrada.
+ */
+export function layoutLanes(items: readonly LaneItem[]): LanePlacement[] {
+  const order = items.map((_, i) => i).sort((a, b) => items[a]!.start - items[b]!.start || items[a]!.end - items[b]!.end)
+  const out: LanePlacement[] = items.map(() => ({ lane: 0, lanes: 1 }))
+  let cluster: number[] = []
+  let clusterEnd = -Infinity
+  let laneEnds: number[] = []
+  const flush = () => { for (const i of cluster) out[i]!.lanes = laneEnds.length; cluster = []; laneEnds = [] }
+  for (const i of order) {
+    const it = items[i]!
+    if (cluster.length && it.start >= clusterEnd) flush()
+    let lane = laneEnds.findIndex((e) => e <= it.start)
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(it.end) } else laneEnds[lane] = it.end
+    out[i]!.lane = lane
+    cluster.push(i)
+    clusterEnd = Math.max(clusterEnd, it.end)
+  }
+  flush()
+  return out
+}

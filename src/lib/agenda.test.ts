@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, groupByDate, isActive, weekDays, zoned } from './agenda'
+import { addDays, groupByDate, isActive, layoutLanes, timeToMinutes, weekDays, zoned } from './agenda'
 
 describe('agenda', () => {
   it('semana vai de segunda a domingo', () => {
@@ -19,5 +19,19 @@ describe('agenda', () => {
   it('status ativos', () => {
     expect(isActive('scheduled') && isActive('confirmed')).toBe(true)
     expect(isActive('cancelled') || isActive('completed') || isActive('no_show')).toBe(false)
+  })
+  it('timeToMinutes converte HH:MM', () => {
+    expect(timeToMinutes('09:30')).toBe(570)
+    expect(timeToMinutes('00:00')).toBe(0)
+  })
+  it('layoutLanes: sem sobreposição ocupa a largura toda', () => {
+    expect(layoutLanes([{ start: 540, end: 570 }, { start: 570, end: 600 }])).toEqual([{ lane: 0, lanes: 1 }, { lane: 0, lanes: 1 }])
+  })
+  it('layoutLanes: sobreposição divide em faixas e reaproveita faixa livre', () => {
+    const r = layoutLanes([{ start: 540, end: 600 }, { start: 560, end: 620 }, { start: 600, end: 630 }, { start: 700, end: 730 }])
+    expect(r[0]).toEqual({ lane: 0, lanes: 2 })
+    expect(r[1]).toEqual({ lane: 1, lanes: 2 })
+    expect(r[2]).toEqual({ lane: 0, lanes: 2 })
+    expect(r[3]).toEqual({ lane: 0, lanes: 1 })
   })
 })
