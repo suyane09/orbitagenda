@@ -21,6 +21,8 @@ create table public.asaas_payment_events (
   occurred_at timestamptz not null default now(),
   environment text not null check (environment in ('sandbox','production'))
 );
+grant select,update on public.establishment_subscriptions to service_role;
+grant select,insert on public.asaas_payment_events to service_role;
 create index asaas_payment_events_establishment_idx
   on public.asaas_payment_events(establishment_id,occurred_at desc);
 alter table public.asaas_payment_events enable row level security;
