@@ -1,5 +1,6 @@
 -- Convites de equipe: token secreto retornado uma única vez ao proprietário.
 -- SQL instalado independentemente do histórico antigo de migrações.
+create extension if not exists pgcrypto with schema extensions;
 create table public.team_invitations (
   id uuid primary key default gen_random_uuid(),
   establishment_id uuid not null references public.establishments(id) on delete cascade,
@@ -12,7 +13,7 @@ create table public.team_invitations (
   revoked_at timestamptz,
   constraint team_invitation_email_valid check (
     length(email) between 3 and 254 and email = lower(btrim(email))
-    and email ~ '^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$'
+    and email ~ '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$'
   )
 );
 create index team_invitations_establishment_idx on public.team_invitations (establishment_id, created_at desc);
@@ -34,7 +35,7 @@ begin
     raise exception 'forbidden' using errcode='42501';
   end if;
   if length(v_email) not between 3 and 254
-     or v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$' then
+     or v_email !~ '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$' then
     raise exception 'invalid_email' using errcode='22023';
   end if;
   -- Evita gerar convites para membros que já têm acesso ativo.
