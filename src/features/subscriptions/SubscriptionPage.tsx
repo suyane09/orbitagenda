@@ -3,10 +3,11 @@ import { useAccount } from '@/features/establishments/AccountProvider'
 import { supabase } from '@/lib/supabase'
 import { describeError } from '@/lib/errors'
 import { formatBRL } from '@/lib/money'
+import { AsaasBillingPanel } from './AsaasBillingPanel'
 
 type Subscription = {
   status: string; started_at: string; current_period_end: string | null;
-  plan_id: string; notes: string
+  plan_id: string; notes: string; asaas_subscription_id: string | null; asaas_provisioning_started_at: string | null
 }
 type Plan = { id: string; name: string; monthly_price_cents: number | null }
 
@@ -27,7 +28,7 @@ export default function SubscriptionPage() {
     setLoading(true);setError('')
     try {
       const s=await supabase.from('establishment_subscriptions')
-        .select('status,started_at,current_period_end,plan_id,notes')
+        .select('status,started_at,current_period_end,plan_id,notes,asaas_subscription_id,asaas_provisioning_started_at')
         .eq('establishment_id',id).maybeSingle()
       if(s.error)throw s.error
       setSub(s.data as Subscription|null)
@@ -67,8 +68,11 @@ export default function SubscriptionPage() {
               : 'Não informado'}</p></div>
         </div>
         {sub.notes&&<p className="rounded-lg bg-paper p-3 text-sm text-slate">{sub.notes}</p>}
-        <p className="text-xs leading-relaxed text-slate">Este painel apresenta informações administrativas. O Orbit Agenda não cobra automaticamente, não processa Pix e não bloqueia sua empresa com base nesses registros. Uma integração de pagamentos precisa ser ativada separadamente.</p>
+        <p className="text-xs leading-relaxed text-slate">O Asaas gera as cobranças recorrentes apenas quando uma assinatura é criada no provedor. A situação contratual pode levar alguns instantes para refletir o pagamento. O painel não bloqueia o acesso automaticamente por inadimplência.</p>
       </div>}
     </section>
+    {!loading && sub && plan?.monthly_price_cents != null && plan.monthly_price_cents > 0 && <AsaasBillingPanel establishmentId={id}
+      planPrice={plan.monthly_price_cents} linked={!!sub.asaas_subscription_id}
+      provisioning={!!sub.asaas_provisioning_started_at} onFinished={load}/>}
   </div>
 }
