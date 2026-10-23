@@ -32,7 +32,15 @@ insert into public.appointments(id,establishment_id,professional_id,service_id,c
  ((current_date + 3)::timestamp + interval '10 hours') at time zone 'America/Maceio',
  ((current_date + 3)::timestamp + interval '10 hours 30 minutes') at time zone 'America/Maceio',
  'scheduled',10000);
--- Volta o relógio APENAS da fixture no banco descartável (sem alterar o relógio do servidor).\n-- O agendamento precisou ser criado no futuro, por validação de data;\n-- em seguida, backdate controlado para testar a conclusão após o horário.\nalter table public.appointments disable trigger check_appointment;\nupdate public.appointments set starts_at=(current_date::timestamp + interval '10 hours') at time zone 'America/Maceio',\n ends_at=(current_date::timestamp + interval '10 hours 30 minutes') at time zone 'America/Maceio'\n where id='e4000000-0000-0000-0000-000000000001';\nalter table public.appointments enable trigger check_appointment;\n-- A conclusão captura a regra vigente.
+-- Volta o relógio APENAS da fixture no banco descartável (sem alterar o relógio do servidor).
+-- O agendamento precisou ser criado no futuro, por validação de data;
+-- em seguida, backdate controlado para testar a conclusão após o horário.
+alter table public.appointments disable trigger check_appointment;
+update public.appointments set starts_at=(current_date::timestamp + interval '10 hours') at time zone 'America/Maceio',
+ ends_at=(current_date::timestamp + interval '10 hours 30 minutes') at time zone 'America/Maceio'
+ where id='e4000000-0000-0000-0000-000000000001';
+alter table public.appointments enable trigger check_appointment;
+-- A conclusão captura a regra vigente.
 update public.appointments set status='completed' where id='e4000000-0000-0000-0000-000000000001';
 do $$ begin
  if (select count(*) from public.appointment_commission_snapshots) <> 1 then raise exception 'FAIL snapshot'; end if;
