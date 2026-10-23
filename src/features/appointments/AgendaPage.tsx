@@ -29,6 +29,7 @@ function AppointmentModal({ estId, tz, options, initial, original, onClose, onSa
   const [found, setFound] = useState<Array<{ id: string; full_name: string; phone: string | null }>>([])
   const [slots, setSlots] = useState<Slot[] | null>(null)
   const [slotError, setSlotError] = useState<string | null>(null)
+  const [requestedTime, setRequestedTime] = useState(initial.id ? '' : initial.time)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const set = (p: Partial<FormState>) => setF((s) => ({ ...s, ...p }))
@@ -62,6 +63,12 @@ function AppointmentModal({ estId, tz, options, initial, original, onClose, onSa
     }
     return list.sort()
   }, [slots, original, f, tz])
+
+  useEffect(() => {
+    if (!requestedTime || slots === null || !f.serviceId || !f.professionalId) return
+    if (times.includes(requestedTime)) setF((prev) => prev.time === requestedTime ? prev : { ...prev, time: requestedTime })
+    else setF((prev) => prev.time === '' ? prev : { ...prev, time: '' })
+  }, [requestedTime, slots, times, f.serviceId, f.professionalId])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -112,12 +119,15 @@ function AppointmentModal({ estId, tz, options, initial, original, onClose, onSa
         <div>
           <p className="mb-1.5 text-sm font-medium text-graphite">Horário{service ? ` (${formatDuration(service.duration_minutes)})` : ''}</p>
           {slotError && <Alert>{slotError}</Alert>}
+          {requestedTime && f.serviceId && slots !== null && !slotError && !times.includes(requestedTime) && (
+            <p className="mb-2 text-xs text-amber-700">O horário {requestedTime} não está disponível para este serviço. Escolha outro horário abaixo.</p>
+          )}
           {!f.serviceId || !f.professionalId ? <p className="text-sm text-slate">Escolha serviço e profissional para ver os horários livres.</p>
             : slots === null ? <Spinner className="size-5" />
             : times.length === 0 ? <p className="text-sm text-slate">Sem horários livres neste dia (expediente, intervalo, folga ou agenda cheia).</p>
             : <div role="radiogroup" aria-label="Horários disponíveis" className="grid grid-cols-4 gap-2 sm:grid-cols-5">
                 {times.map((t) => (
-                  <button key={t} type="button" role="radio" aria-checked={f.time === t} onClick={() => set({ time: t })}
+                  <button key={t} type="button" role="radio" aria-checked={f.time === t} onClick={() => { setRequestedTime(''); set({ time: t }) }}
                     className={`h-10 rounded-control border text-sm tabular-nums ${f.time === t ? 'border-orbit bg-orbit text-white' : 'border-hairline hover:border-orbit'}`}>{t}</button>
                 ))}
               </div>}
@@ -171,13 +181,14 @@ function ApptCard({ a, tz, compact, busyId, onEdit, onAction }: {
 
 // Grade de atendimentos: a escala representa horas, não disponibilidade.
 // Blocos e durações são calculados exclusivamente dos agendamentos reais.
-function DayTimeline({ appointments, professionals, tz, busyId, onEdit, onAction }: {
+function DayTimeline({ appointments, professionals, tz, busyId, onEdit, onAction, onCreate }: {
   appointments: AppointmentRow[]
   professionals: AgendaOptions['professionals']
   tz: string
   busyId: string | null
   onEdit: (a: AppointmentRow) => void
   onAction: (a: AppointmentRow, s: AppointmentStatus) => void
+  onCreate: (professionalId: string, time: string) => void
 }) {
   const minutes = (iso: string) => {
     const t = zoned(iso, tz).time
@@ -188,7 +199,7 @@ function DayTimeline({ appointments, professionals, tz, busyId, onEdit, onAction
   const maxEnd = appointments.length ? Math.max(...appointments.map((a) => minutes(a.ends_at))) : 19 * 60
   const startHour = Math.max(0, Math.min(8, Math.floor(minStart / 60)))
   const endHour = Math.min(24, Math.max(20, Math.ceil(maxEnd / 60)))
-  const hourHeight = 76
+  const hourHeight = 64
   const height = (endHour - startHour) * hourHeight
   const hourLabels = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i)
   const columns = professionals.length ? professionals : [{ id: 'unassigned', name: 'Atendimentos', color: '#4435d7' }]
@@ -210,7 +221,20 @@ function DayTimeline({ appointments, professionals, tz, busyId, onEdit, onAction
           {columns.map((pro) => {
             const appts = appointments.filter((a) => pro.id === 'unassigned' || a.professional_id === pro.id)
             return <div key={pro.id} className="relative border-r border-hairline last:border-r-0" style={{ height }}>
-              {hourLabels.slice(0, -1).map((hour) => <div key={hour} className="absolute inset-x-0 border-t border-[#e9ecf3]" style={{ top: (hour - startHour) * hourHeight, height: hourHeight }} />)}
+              {hourLabels.slice(0, -1).map((hour) => (
+                <div key={hour} className="absolute inset-x-0 border-t border-[#edf0f5]" style={{ top: (hour - startHour) * hourHeight, height: hourHeight }}>
+                  {[0, 30].map((minute) => {
+                    const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+                    return <button key={minute} type="button" aria-label={`Novo agendamento com ${pro.name} às ${time}. Disponibilidade verificada após escolher o serviço.`}
+                      title={`Criar agendamento às ${time} — disponibilidade sujeita à escolha do serviço`}
+                      onClick={() => onCreate(pro.id, time)}
+                      className="group absolute inset-x-0 flex h-1/2 items-center justify-center text-xs text-orbit/0 transition-colors hover:bg-orbit-soft/50 hover:text-orbit focus-visible:z-20 focus-visible:bg-orbit-soft focus-visible:text-orbit focus-visible:outline-2 focus-visible:outline-orbit"
+                      style={{ top: minute === 0 ? 0 : '50%' }}>
+                      <span className="pointer-events-none rounded-md bg-white/90 px-2 py-1 font-medium shadow-sm opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">+ {time}</span>
+                    </button>
+                  })}
+                </div>
+              ))}
               {appts.map((a) => {
                 const top = (minutes(a.starts_at) - startHour * 60) / 60 * hourHeight
                 const duration = Math.max(15, (new Date(a.ends_at).getTime() - new Date(a.starts_at).getTime()) / 60000)
@@ -228,7 +252,7 @@ function DayTimeline({ appointments, professionals, tz, busyId, onEdit, onAction
             </div>
           })}
         </div>
-        {appointments.length > 0 && <div className="border-t border-hairline bg-[#fafbfe] px-4 py-2 text-xs text-slate">Selecione um atendimento para editar. As linhas indicam apenas a escala de horas, não horários livres.</div>}
+        <div className="border-t border-hairline bg-[#fafbfe] px-4 py-2 text-xs text-slate">Clique em uma faixa de horário para iniciar um agendamento. A disponibilidade real será verificada após escolher o serviço.</div>
       </div>
     </div>
   )
@@ -274,6 +298,10 @@ export default function AgendaPage() {
   const today = todayInZone(new Date(), tz)
 
   const openNew = (d: string) => setModal({ original: null, form: { id: null, customer: null, serviceId: '', professionalId: proFilter, date: d < today ? today : d, time: '', notes: '' } })
+  const openAt = (professionalId: string, time: string) => {
+    if (!options) return
+    setModal({ original: null, form: { id: null, customer: null, serviceId: '', professionalId, date, time: date < today ? '' : time, notes: '' } })
+  }
   const openEdit = (a: AppointmentRow) => setModal({ original: a, form: {
     id: a.id, customer: { id: a.customer_id, name: a.customer_name }, serviceId: a.service_id, professionalId: a.professional_id,
     date: zoned(a.starts_at, tz).date, time: zoned(a.starts_at, tz).time, notes: a.notes ?? '' } })
@@ -339,7 +367,7 @@ export default function AgendaPage() {
               <div><h2 className="font-display text-base font-semibold">Atendimentos do dia</h2><p className="mt-0.5 text-xs text-slate">{daily.length} {daily.length === 1 ? 'agendamento' : 'agendamentos'} nos filtros selecionados</p></div>
               <button type="button" onClick={() => openNew(date)} disabled={!options} className="rounded-lg px-3 py-2 text-sm font-medium text-orbit hover:bg-orbit-soft disabled:opacity-50">+ Adicionar</button>
             </div>
-            <DayTimeline appointments={daily} professionals={proGroups} tz={tz} busyId={busyId} onEdit={openEdit} onAction={onAction} />
+            <DayTimeline appointments={daily} professionals={proGroups} tz={tz} busyId={busyId} onEdit={openEdit} onAction={onAction} onCreate={openAt} />
             {daily.length > 0 && <div className="border-t border-hairline p-4 sm:p-5">
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate">Detalhes e ações</h3>
               <ul className="space-y-2">{daily.map((a) => <ApptCard key={a.id} a={a} tz={tz} busyId={busyId} onEdit={openEdit} onAction={onAction} />)}</ul>
