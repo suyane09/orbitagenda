@@ -44,11 +44,16 @@ export interface AgendaOptions {
 
 /** Agendamentos de p_from a p_to (datas inclusivas, no fuso do estabelecimento). */
 export async function listAppointments(establishmentId: string, from: string, to: string, professionalId?: string | null): Promise<AppointmentRow[]> {
-  const { data, error } = await supabase.rpc('list_appointments', {
-    p_establishment_id: establishmentId, p_from: from, p_to: to, p_professional_id: professionalId ?? null,
-  })
-  if (error) throw error
-  return (data ?? []) as AppointmentRow[]
+  const all: AppointmentRow[] = []
+  // Sem paginação a API pode devolver apenas os primeiros registros (limite padrão do PostgREST).
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await supabase.rpc('list_appointments', {
+      p_establishment_id: establishmentId, p_from: from, p_to: to, p_professional_id: professionalId ?? null,
+    }).order('starts_at', { ascending: true }).order('id', { ascending: true }).range(offset, offset + 499)
+    if (error) throw error
+    all.push(...(data ?? []) as AppointmentRow[])
+    if (!data || data.length < 500) return all
+  }
 }
 
 export async function getAvailableSlots(
