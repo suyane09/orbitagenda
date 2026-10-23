@@ -6,17 +6,19 @@ import { Alert } from '@/components/ui/Alert'
 import { TextField, SelectField } from '@/components/ui/Field'
 import { EmptyState, ErrorState } from '@/components/ui/States'
 import { formatBRL, parseBRL } from '@/lib/money'
+import { todayInZone } from '@/lib/schedule'
 import { describeError } from '@/lib/errors'
 import { loadCommissionBalances, loadProfessionalNames, type CommissionBalance } from './balances'
 import { loadCommissionPayouts, recordCommissionPayout, type CommissionPayout } from './payouts'
 
 const methods = { pix: 'Pix', cash: 'Dinheiro', card: 'Cartão', other: 'Outro' } as const
-const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' })
+const today = (zone: string) => todayInZone(new Date(), zone)
 
 export default function CommissionsPage() {
   const { current } = useAccount()
   const establishmentId = current?.establishment.id ?? ''
   const isOwner = current?.role === 'owner'
+  const timeZone = current?.establishment.timezone ?? 'America/Maceio'
   const [items, setItems] = useState<CommissionBalance[]>([])
   const [payouts, setPayouts] = useState<CommissionPayout[]>([])
   const [names, setNames] = useState<Map<string, string>>(new Map())
@@ -28,7 +30,7 @@ export default function CommissionsPage() {
   const [payProfessional, setPayProfessional] = useState('')
   const [payValue, setPayValue] = useState('')
   const [payMethod, setPayMethod] = useState<CommissionPayout['method']>('pix')
-  const [payDate, setPayDate] = useState(today)
+  const [payDate, setPayDate] = useState(() => today(timeZone))
   const [payNote, setPayNote] = useState('')
 
   const refresh = useCallback(async () => {
@@ -78,7 +80,7 @@ export default function CommissionsPage() {
     if (!amountCents || amountCents <= 0 || amountCents > available || !Number.isSafeInteger(amountCents)) {
       setError('Informe um valor maior que zero e até o saldo disponível.'); return
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(payDate) || payDate > today()) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(payDate) || payDate > today(timeZone)) {
       setError('Informe uma data válida, que não esteja no futuro.'); return
     }
     if (payNote.length > 500) { setError('A observação deve ter até 500 caracteres.'); return }
@@ -144,7 +146,7 @@ export default function CommissionsPage() {
             <TextField label={`Valor (R$) · disponível ${formatBRL(available)}`} value={payValue} inputMode="decimal" onChange={e=>setPayValue(e.target.value)} placeholder="Ex.: 20,00" />
             <SelectField label="Forma de pagamento" value={payMethod} onChange={e=>setPayMethod(e.target.value as CommissionPayout['method'])}
               options={Object.entries(methods).map(([value,label])=>({value,label}))} />
-            <TextField label="Data do repasse" type="date" value={payDate} max={today()} onChange={e=>setPayDate(e.target.value)} />
+            <TextField label="Data do repasse" type="date" value={payDate} max={today(timeZone)} onChange={e=>setPayDate(e.target.value)} />
             <div className="sm:col-span-2"><TextField label="Observação (opcional)" value={payNote} maxLength={500} onChange={e=>setPayNote(e.target.value)} placeholder="Ex.: Pix confirmado" /></div>
           </div>
           <div className="mt-4 flex justify-end"><Button variant="accent" disabled={!payProfessional || available <= 0 || loading} loading={saving} onClick={() => void submitPayout()}>Registrar repasse</Button></div>
