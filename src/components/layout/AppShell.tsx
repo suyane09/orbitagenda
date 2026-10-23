@@ -70,7 +70,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         {current && (
           <>
             <p className="px-2.5 pb-1.5 text-xs text-white/30">Operação</p>
-            <div className="space-y-0.5">{operation.filter((e) => e.to !== '/app/comissoes' || current.role === 'owner').map((e) => <NavItem key={e.to} entry={e} onNavigate={onNavigate} />)}</div>
+            <div className="space-y-0.5">{operation.filter((e) => !['/app/financeiro', '/app/comissoes'].includes(e.to) || current.role === 'owner').map((e) => <NavItem key={e.to} entry={e} onNavigate={onNavigate} />)}</div>
             <p className="px-2.5 pb-1.5 pt-5 text-xs text-white/30">Catálogo</p>
             <div className="space-y-0.5">{catalog.map((e) => <NavItem key={e.to} entry={e} onNavigate={onNavigate} />)}</div>
           </>

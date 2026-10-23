@@ -7,11 +7,19 @@ export interface Entry {
   method: PaymentMethod; occurred_on: string; created_at: string
 }
 export async function listEntries(establishmentId: string, from: string, to: string): Promise<Entry[]> {
-  const { data, error } = await supabase.from('financial_entries').select('id,establishment_id,appointment_id,kind,description,amount_cents,method,occurred_on,created_at')
-    .eq('establishment_id', establishmentId).gte('occurred_on', from).lte('occurred_on', to)
-    .order('occurred_on', { ascending: false }).order('created_at', { ascending: false }).limit(1000)
-  if (error) throw error
-  return (data ?? []) as Entry[]
+  const all: Entry[] = []
+  // Paginação com ordenação estável: o painel não deve apresentar um total parcial como se fosse completo.
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await supabase.from('financial_entries')
+      .select('id,establishment_id,appointment_id,kind,description,amount_cents,method,occurred_on,created_at')
+      .eq('establishment_id', establishmentId).gte('occurred_on', from).lte('occurred_on', to)
+      .order('occurred_on', { ascending: false })
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(offset, offset + 499)
+    if (error) throw error
+    all.push(...(data ?? []) as Entry[])
+    if (!data || data.length < 500) return all
+  }
 }
 export async function createEntry(establishmentId: string, input: {
   kind: EntryKind; description: string; amount_cents: number; method: PaymentMethod
@@ -23,12 +31,17 @@ export async function createEntry(establishmentId: string, input: {
 
 /** Consulta todos os lançamentos de um atendimento, sem depender do filtro de datas do painel. */
 export async function listAppointmentEntries(establishmentId: string, appointmentId: string): Promise<Entry[]> {
-  const { data, error } = await supabase.from('financial_entries')
-    .select('id,establishment_id,appointment_id,kind,description,amount_cents,method,occurred_on,created_at')
-    .eq('establishment_id', establishmentId).eq('appointment_id', appointmentId)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return (data ?? []) as Entry[]
+  const all: Entry[] = []
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await supabase.from('financial_entries')
+      .select('id,establishment_id,appointment_id,kind,description,amount_cents,method,occurred_on,created_at')
+      .eq('establishment_id', establishmentId).eq('appointment_id', appointmentId)
+      .order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(offset, offset + 499)
+    if (error) throw error
+    all.push(...(data ?? []) as Entry[])
+    if (!data || data.length < 500) return all
+  }
 }
 
 /** Lançamentos de vários atendimentos (em lotes, para não estourar o tamanho da URL). */
@@ -36,11 +49,16 @@ export async function listEntriesByAppointments(establishmentId: string, appoint
   const ids = [...new Set(appointmentIds)]
   const out: Entry[] = []
   for (let i = 0; i < ids.length; i += 100) {
-    const { data, error } = await supabase.from('financial_entries')
-      .select('id,establishment_id,appointment_id,kind,description,amount_cents,method,occurred_on,created_at')
-      .eq('establishment_id', establishmentId).in('appointment_id', ids.slice(i, i + 100))
-    if (error) throw error
-    out.push(...((data ?? []) as Entry[]))
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await supabase.from('financial_entries')
+        .select('id,establishment_id,appointment_id,kind,description,amount_cents,method,occurred_on,created_at')
+        .eq('establishment_id', establishmentId).in('appointment_id', ids.slice(i, i + 100))
+        .order('created_at', { ascending: true }).order('id', { ascending: true })
+        .range(offset, offset + 499)
+      if (error) throw error
+      out.push(...((data ?? []) as Entry[]))
+      if (!data || data.length < 500) break
+    }
   }
   return out
 }
@@ -61,16 +79,22 @@ export interface Receivable {
   price_cents: number; paid_cents: number; balance_cents: number
 }
 
-const RECEIVABLES_LIMIT = 500
+const RECEIVABLES_PAGE_SIZE = 500
 
 /** Atendimentos concluídos com saldo ainda não recebido (valor do serviço − pagamentos registrados). */
 export async function listReceivables(establishmentId: string): Promise<{ items: Receivable[]; truncated: boolean }> {
-  const { data, error } = await supabase.from('appointments')
-    .select('id,starts_at,price_cents,customers(full_name),services(name)')
-    .eq('establishment_id', establishmentId).eq('status', 'completed').gt('price_cents', 0)
-    .order('starts_at', { ascending: false }).limit(RECEIVABLES_LIMIT)
-  if (error) throw error
-  const rows = (data ?? []).map((r) => ({
+  const completed: Array<{ id: string; starts_at: string; price_cents: number; customers: unknown; services: unknown }> = []
+  for (let offset = 0; ; offset += RECEIVABLES_PAGE_SIZE) {
+    const { data, error } = await supabase.from('appointments')
+      .select('id,starts_at,price_cents,customers(full_name),services(name)')
+      .eq('establishment_id', establishmentId).eq('status', 'completed').gt('price_cents', 0)
+      .order('starts_at', { ascending: false }).order('id', { ascending: true })
+      .range(offset, offset + RECEIVABLES_PAGE_SIZE - 1)
+    if (error) throw error
+    completed.push(...(data ?? []))
+    if (!data || data.length < RECEIVABLES_PAGE_SIZE) break
+  }
+  const rows = completed.map((r) => ({
     id: r.id, starts_at: r.starts_at, price_cents: r.price_cents,
     customer_name: (r.customers as unknown as { full_name: string } | null)?.full_name ?? 'Cliente',
     service_name: (r.services as unknown as { name: string } | null)?.name ?? 'Serviço',
@@ -82,7 +106,7 @@ export async function listReceivables(establishmentId: string): Promise<{ items:
     const balance_cents = Math.max(0, r.price_cents - paid_cents)
     if (balance_cents > 0) items.push({ ...r, paid_cents, balance_cents })
   }
-  return { items, truncated: rows.length >= RECEIVABLES_LIMIT }
+  return { items, truncated: false }
 }
 
 /** Consulta paginada do dia: evita truncar o fechamento em 1.000 lançamentos. */

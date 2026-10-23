@@ -4,12 +4,14 @@ import { TextField, SelectField } from '@/components/ui/Field'
 import { useAccount } from '@/features/establishments/AccountProvider'
 import { formatBRL, parseBRL } from '@/lib/money'
 import { describeError } from '@/lib/errors'
+import { todayInZone } from '@/lib/schedule'
+import { buildCsv } from '@/lib/csv'
 import { CompletePaymentModal } from '@/features/appointments/CompletePaymentModal'
 import { CashClosingPanel } from './CashClosingPanel'
 import { createEntry, listEntries, listReceivables, type Entry, type EntryKind, type PaymentMethod, type Receivable } from './api'
 
-const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
-const startMonth = () => today().slice(0, 7) + '-01'
+const today = (tz: string) => todayInZone(new Date(), tz)
+const startMonth = (tz: string) => today(tz).slice(0, 7) + '-01'
 const methods: Record<PaymentMethod, string> = { pix: 'Pix', cash: 'Dinheiro', card: 'Cartão', other: 'Outro' }
 const kinds: Record<EntryKind, string> = { income: 'Recebimento', expense: 'Despesa', refund: 'Estorno' }
 const card = 'min-w-0 rounded-xl border border-hairline bg-surface shadow-[0_1px_2px_rgb(17_20_26/0.04)]'
@@ -18,8 +20,9 @@ export default function FinancePage() {
   const { current } = useAccount()
   const establishmentId = current?.establishment.id ?? ''
   const allowed = current?.role === 'owner'
-  const [from, setFrom] = useState(startMonth)
-  const [to, setTo] = useState(today)
+  const timezone = current?.establishment.timezone ?? 'America/Maceio'
+  const [from, setFrom] = useState(() => startMonth(timezone))
+  const [to, setTo] = useState(() => today(timezone))
   const [entries, setEntries] = useState<Entry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -29,7 +32,7 @@ export default function FinancePage() {
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [method, setMethod] = useState<PaymentMethod>('pix')
-  const [date, setDate] = useState(today)
+  const [date, setDate] = useState(() => today(timezone))
   const [appointmentId, setAppointmentId] = useState('')
   const [receivables, setReceivables] = useState<{ items: Receivable[]; truncated: boolean } | null>(null)
   const [receivablesError, setReceivablesError] = useState('')
@@ -40,7 +43,7 @@ export default function FinancePage() {
     if (!allowed || !establishmentId) { setLoading(false); return }
     setLoading(true); setError('')
     try { setEntries(await listEntries(establishmentId, from, to)) }
-    catch (e) { setError(describeError(e, 'Não foi possível carregar o financeiro.')) }
+    catch (e) { setEntries([]); setError(describeError(e, 'Não foi possível carregar o financeiro.')) }
     finally { setLoading(false) }
   }, [allowed, establishmentId, from, to])
   useEffect(() => { void reload() }, [reload])
@@ -63,6 +66,25 @@ export default function FinancePage() {
     return t
   }, { income: 0, expense: 0, refund: 0 }), [entries])
   const net = totals.income - totals.expense - totals.refund
+
+  function exportPeriod() {
+    if (loading || error || !entries.length) return
+    const rows: Array<Array<string | number>> = [
+      ['Data', 'Tipo', 'Descrição', 'Valor (R$)', 'Forma de pagamento', 'ID do agendamento'],
+      ...entries.map(e => [e.occurred_on, kinds[e.kind], e.description,
+        (e.kind === 'income' ? e.amount_cents : -e.amount_cents) / 100,
+        methods[e.method], e.appointment_id ?? '']),
+    ]
+    const blob = new Blob([buildCsv(rows)], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `orbit-agenda-financeiro-${from}-a-${to}.csv`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault(); setMessage(''); setError('')
@@ -93,6 +115,7 @@ export default function FinancePage() {
       <div className="min-w-[145px] flex-1 sm:max-w-[190px]"><TextField label="De" type="date" value={from} max={to} onChange={e => setFrom(e.target.value)} /></div>
       <div className="min-w-[145px] flex-1 sm:max-w-[190px]"><TextField label="Até" type="date" value={to} min={from} onChange={e => setTo(e.target.value)} /></div>
       <Button type="button" variant="outline" onClick={refreshAll}>Atualizar</Button>
+      <Button type="button" variant="outline" onClick={exportPeriod} disabled={loading || !!error || entries.length === 0}>Exportar CSV</Button>
     </section>
 
     <section aria-label="Indicadores financeiros" className={`${card} grid grid-cols-2 divide-x divide-y divide-hairline overflow-hidden md:grid-cols-3 xl:grid-cols-3`}>
@@ -142,12 +165,11 @@ export default function FinancePage() {
         <h2 className="font-display text-base font-semibold tracking-tight">Movimentações</h2>
         {loading ? <p className="mt-5 text-sm text-slate">Carregando…</p> : entries.length === 0 ? <p className="mt-5 text-sm text-slate">Nenhuma movimentação neste período.</p> :
           <div className="mt-4 divide-y divide-hairline">{entries.map(e => <div key={e.id} className="flex items-center justify-between gap-3 py-3.5"><div className="min-w-0"><p className="truncate text-sm font-medium text-ink">{e.description}</p><p className="mt-1 text-xs text-slate">{e.occurred_on.split('-').reverse().join('/')} · {kinds[e.kind]} · {methods[e.method]}</p></div><p className={'shrink-0 font-display text-sm font-semibold tabular-nums '+(e.kind === 'income' ? 'text-ok' : 'text-danger')}>{e.kind === 'income' ? '+' : '−'} {formatBRL(e.amount_cents)}</p></div>)}</div>}
-        {entries.length === 1000 && <p className="mt-3 text-xs text-signal">Limite de 1.000 registros no período. Reduza o intervalo para conferir todos os lançamentos.</p>}
       </section>
       </div>
     </div>
     <CashClosingPanel establishmentId={establishmentId} />
-    {payTarget && <CompletePaymentModal a={payTarget} estId={establishmentId} tz={current?.establishment.timezone ?? 'America/Sao_Paulo'} receiveOnly
+    {payTarget && <CompletePaymentModal a={payTarget} estId={establishmentId} tz={current?.establishment.timezone ?? 'America/Maceio'} receiveOnly
       onClose={() => { setPayTarget(null); refreshAll() }}
       onCompleted={() => { setPayTarget(null); setMessage('Pagamento registrado.'); refreshAll() }} />}
   </div>

@@ -6,6 +6,9 @@ on:
   pull_request:
     paths:
       - 'src/features/commissions/**'
+      - 'src/features/finance/**'
+      - 'src/lib/**'
+      - 'README.md'
       - 'supabase/migrations/**'
       - 'supabase/tests/**'
       - 'src/components/layout/AppShell.tsx'
