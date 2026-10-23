@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - 'feature/commission-2c-panel-review'
-      - 'improve/production-quality-audit'
   pull_request:
     paths:
       - 'src/features/commissions/**'
