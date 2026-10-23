@@ -55,12 +55,12 @@ export default function CommissionsPage() {
       </div>
       <Alert tone="info">Esta tela é somente de consulta. Ainda não registra repasses aos profissionais.
         Atendimentos concluídos antes da ativação do módulo não entram neste demonstrativo.</Alert>
-      {error && <Alert>{error} Verifique se a migration 2B foi aplicada em ambiente de testes.</Alert>}
+      {error && <Alert>{error} Confira se a migração de comissões 2C está instalada e se sua conta possui permissão de proprietário.</Alert>}
       {loading ? <p className="text-sm text-slate">Carregando comissões…</p> : !error && totals.length === 0 ?
         <EmptyState title="Nenhuma comissão calculada">Conclua um novo atendimento e registre o recebimento para visualizar os valores.</EmptyState>
         : !error && <>
           <div className="rounded-xl border border-hairline bg-surface p-5">
-            <p className="text-sm text-slate">Comissões acumuladas (sem repasses)</p>
+            <p className="text-sm text-slate">Comissões geradas sobre recebimentos (sem repasses)</p>
             <p className="mt-2 font-display text-3xl font-semibold">{formatBRL(items.reduce((sum, r) => sum + Number(r.accrued_cents), 0))}</p>
           </div>
           <div className="overflow-x-auto rounded-xl border border-hairline bg-surface">
