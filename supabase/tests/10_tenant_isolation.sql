@@ -83,7 +83,7 @@ select tests.expect_count($$
   'toda função SECURITY DEFINER fixa search_path');
 select tests.expect_count($$
   select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname in ('public','private') and p.prosecdef and has_function_privilege('anon', p.oid, 'execute') and p.proname <> 'create_public_booking'$, 0,
+  where n.nspname in ('public','private') and p.prosecdef and has_function_privilege('anon', p.oid, 'execute') and p.proname <> 'create_public_booking'$$, 0,
   'anon não executa funções SECURITY DEFINER além da reserva pública controlada');
 select tests.expect_count($$
   select 1 from information_schema.role_table_grants
