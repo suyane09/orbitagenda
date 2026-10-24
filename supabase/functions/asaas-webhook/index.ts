@@ -57,7 +57,7 @@ Deno.serve(async req=>{
     .eq('asaas_environment',environment).maybeSingle()
   if(lookupError)return response(503,'database_unavailable')
   if(!linked)return response(200,'ignored')
-  const {error} = await admin.rpc('record_asaas_payment_event',{
+  const {error} = await admin.rpc('record_asaas_billing_event',{
     p_event_id:input.id,
     p_asaas_subscription_id:actual.subscription,
     p_payment_id:actual.id,
@@ -65,6 +65,7 @@ Deno.serve(async req=>{
     p_payment_status:actual.status,
     p_amount_cents:Math.round(actual.value*100),
     p_environment:environment,
+    p_due_date:typeof actual.dueDate==='string' && /^\d{4}-\d{2}-\d{2}$/.test(actual.dueDate) ? actual.dueDate : null,
   })
   if(error){
     // A retry is safer than acknowledging a failed database transaction.
