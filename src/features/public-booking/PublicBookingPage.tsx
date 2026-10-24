@@ -1605,6 +1605,10 @@ export default function PublicBookingPage() {
         setFormError('Não foi possível validar a verificação de segurança. Tente novamente.')
         return
       }
+      if (code === 'subscription_suspended') {
+        setFormError('Os agendamentos online deste estabelecimento estão temporariamente suspensos. Entre em contato diretamente com a equipe.')
+        return
+      }
       if (code === 'service_unavailable') {
         setFormError('O agendamento online está indisponível no momento. Tente novamente em instantes.')
         return
