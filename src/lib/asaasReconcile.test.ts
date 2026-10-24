@@ -33,6 +33,24 @@ describe('reconciliação Asaas · regras puras', () => {
     expect(r.divergences.map((d) => d.type)).toContain('local_blocked_provider_paid')
     expect(r.plans[0]?.rpc).toBe('record_asaas_billing_event')
   })
+  it('estorno pendente não bloqueia nem cria evento de estorno prematuro', () => {
+    const r = reconcileSubscription({ ...base,
+      local: local({ status: 'active', last_paid_due_date: '2026-10-20' }),
+      provider: { status: 'ACTIVE' },
+      payments: [pay({ status: 'REFUND_IN_PROGRESS', dueDate: '2026-10-20' })],
+    })
+    expect(r.divergences.map((d) => d.type)).toContain('refund_pending_at_provider')
+    expect(r.plans).toHaveLength(0)
+    expect(verifiedEventFor(pay({ status: 'REFUND_IN_PROGRESS' }))).toBeNull()
+  })
+  it('estorno parcial requer revisão e não equivale a estorno integral', () => {
+    const r = reconcileSubscription({ ...base,
+      local: local(), provider: { status: 'ACTIVE' },
+      payments: [pay({ status: 'PARTIALLY_REFUNDED', dueDate: '2026-10-20' })],
+    })
+    expect(r.divergences.map((d) => d.type)).toContain('partial_refund_requires_review')
+    expect(r.plans).toHaveLength(0)
+  })
   it('detecta cobrança ausente e assinatura inexistente no provedor', () => {
     const missing = reconcileSubscription({ ...base, local: local(), provider: { status: 'ACTIVE' },
       payments: [pay({ status: 'RECEIVED', dueDate: '2026-06-01' })] })
