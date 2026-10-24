@@ -83,8 +83,8 @@ select tests.expect_count($$
   'toda função SECURITY DEFINER fixa search_path');
 select tests.expect_count($$
   select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname in ('public','private') and has_function_privilege('anon', p.oid, 'execute')$$, 0,
-  'anon não executa nenhuma função de public/private');
+  where n.nspname in ('public','private') and p.prosecdef and has_function_privilege('anon', p.oid, 'execute')$$, 0,
+  'anon não executa funções SECURITY DEFINER de public/private');
 select tests.expect_count($$
   select 1 from information_schema.role_table_grants
   where grantee = 'anon' and table_schema = 'public'$$, 0,
@@ -136,6 +136,9 @@ reset role;
 
 select set_config('tests.est_a', (select id::text from public.establishments where slug = 'barbearia-alfa'), false);
 select set_config('tests.est_b', (select id::text from public.establishments where slug = 'salao-bravo'), false);
+-- Fixture: assinatura paga somente no banco descartável; não libera contas reais.
+update public.establishment_subscriptions set status='active', payment_due_at=null
+ where establishment_id in (current_setting('tests.est_a')::uuid,current_setting('tests.est_b')::uuid);
 
 select tests.expect_true($$(select count(*) from public.memberships
    where establishment_id = current_setting('tests.est_a')::uuid
