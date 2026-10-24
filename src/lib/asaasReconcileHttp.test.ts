@@ -110,6 +110,58 @@ describe('asaas-reconcile · HTTP, erros e exclusão confirmada', () => {
     expect(res.status).toBe(503)
     expect(await res.json()).toMatchObject({ message: 'reconciliation_audit_failed' })
   })
+  it('recusa assinatura que a API devolve com ID diferente', async () => {
+    const original = mockProvider()
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) =>
+      String(input).includes('/subscriptions/sub_reconcile_test')
+        && !String(input).includes('/payments')
+        ? reply({ id: 'sub_other', status: 'ACTIVE' })
+        : original(input)))
+    const res = await post()
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ checked: 1, errors: 1 })
+    expect(updateEq).not.toHaveBeenCalled()
+  })
+  it('404 ao listar pagamentos nao e interpretado como nenhum pagamento', async () => {
+    const original = mockProvider()
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) =>
+      String(input).includes('/payments') ? reply({}, 404) : original(input)))
+    const res = await post()
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ checked: 1, errors: 1 })
+    expect(updateEq).not.toHaveBeenCalled()
+  })
+  it('rejeita cobranca de outra assinatura sem registrar nenhum evento', async () => {
+    const original = mockProvider()
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) =>
+      String(input).includes('/payments')
+        ? reply({ data: [{ id: 'pay_foreign', subscription: 'sub_foreign', status: 'RECEIVED',
+          value: 49.9, dueDate: '2026-10-24' }], hasMore: false })
+        : original(input)))
+    const res = await post()
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ checked: 1, applied: 0, errors: 1 })
+    expect(updateEq).not.toHaveBeenCalled()
+    expect(rpc).not.toHaveBeenCalledWith('record_asaas_billing_event', expect.anything())
+  })
+  it('nao considera a conciliacao completa quando Asaas tem mais de mil cobrancas', async () => {
+    const original = mockProvider()
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) =>
+      String(input).includes('/payments')
+        ? reply({ data: [{ id: 'pay_one', subscription: 'sub_reconcile_test',
+          status: 'RECEIVED', value: 49.9, dueDate: '2026-10-24' }], hasMore: true })
+        : original(input)))
+    const res = await post()
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ checked: 1, errors: 1 })
+    expect(updateEq).not.toHaveBeenCalled()
+  })
+  it('erro ao atualizar timestamp de sync e registrado, sem resposta de sucesso', async () => {
+    updateEq.mockResolvedValue({ error: { message: 'db_update_error' } })
+    const res = await post()
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ checked: 1, errors: 1 })
+  })
   it('erro da API Asaas e registrado e retorna 503', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw Error('offline') }))
     // The handler's provider fetch is mocked. Restore it only after handler call,
