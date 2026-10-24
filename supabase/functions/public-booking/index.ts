@@ -163,6 +163,8 @@ return respond({ slots: slots ?? [] })
           return respond({ error: 'slot_unavailable' }, 409)
         if (error.code === '22023' || error.code === 'P0002')
           return respond({ error: 'invalid_or_unavailable' }, 400)
+        if (error.code === '42501' && error.message === 'subscription_suspended')
+          return respond({ error: 'subscription_suspended' }, 403)
         if (error.code === 'P0001') return respond({ error: 'slot_unavailable' }, 409)
         console.error('public-booking: create_public_booking falhou', error.code) // só o código; nunca a mensagem/dados
         return respond({ error: 'booking_failed' }, 500)
