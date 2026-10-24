@@ -8,7 +8,7 @@ const SUB = {
   establishment_id: EST, plan_id: 'plan_1', status: 'past_due',
   asaas_subscription_id: null, asaas_provisioning_started_at: null,
 }
-const lookup = {
+const lookup: Record<string, unknown> = {
   memberships: { id: 'm1' }, establishment_subscriptions: SUB,
   subscription_plans: { name: 'Inicial', monthly_price_cents: 4990 },
   establishments: { name: 'Barbearia Ficticia' },
@@ -47,7 +47,7 @@ function makeFrom() {
           updateCount++
           return updateCount === 1 ? reserve : saved
         }
-        return { data: lookup[table as keyof typeof lookup], error: null }
+        return { data: lookup[table], error: null }
       },
     }
     return chain
@@ -107,7 +107,7 @@ describe('asaas-subscribe · autenticacao, idempotencia e persistencia', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
   it('nega contratacao a membro sem papel de proprietario', async () => {
-    lookup.memberships = null as never
+    lookup.memberships = null
     expect((await post()).status).toBe(403)
     expect(updateCount).toBe(0)
     expect(fetch).not.toHaveBeenCalled()
