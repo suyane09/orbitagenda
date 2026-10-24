@@ -47,3 +47,14 @@ Pós-testes: **0** estabelecimentos, eventos e assinaturas fictícias remanescen
 5. Avaliar avisos de segurança do Supabase e cobertura de regressão de todos os módulos do SaaS.
 
 **Conclusão:** política de cobrança, proteção de escrita, isolamento de leitura e lógica de reativação passaram nos testes transacionais; **não afirmar homologação end-to-end do Asaas nem conclusão de 100% do SaaS**.
+
+
+## Verificação adicional — 24/10/2026, madrugada
+
+- **Falha identificada:** o webhook encaminhava qualquer evento `PAYMENT_*` ao RPC, embora o RPC aceite apenas `PAYMENT_RECEIVED`, `PAYMENT_CONFIRMED` e `PAYMENT_OVERDUE`. Eventos como `PAYMENT_CREATED` provocariam resposta 503 e reenvios desnecessários.
+- **Correção aplicada:** somente esses três eventos de cobrança são encaminhados; outros recebem HTTP 200 `ignored`. Isso não significa que estornos ou chargebacks estejam tratados — **a política para eles permanece pendente**.
+- **Falha identificada:** um `PAYMENT_OVERDUE` atrasado podia chegar após o pagamento ter sido recebido. Embora o banco já tenha proteção de ordenação, o webhook não reconciliava o nome do evento com o status atual retornado pela API Asaas.
+- **Correção aplicada:** para os três eventos aceitos, o webhook busca o pagamento na API Asaas e usa o **status atual verificado** (`RECEIVED`, `CONFIRMED` ou `OVERDUE`) para determinar o evento efetivo; outros estados atuais são ignorados.
+- **Publicação comprovada:** commit GitHub `8e6b275c41cceba8ea0044e311c2facca75683b4`; Edge Function `asaas-webhook` versão **14**, status `ACTIVE`, com ambas as alterações confirmadas por leitura da versão implantada.
+- **Integridade pós-publicação:** única assinatura existente permaneceu `active`, ambiente `sandbox`, `payment_due_at=null`, `last_paid_due_date=null`, `private.billing_allows_write(...)=true`. Nenhuma cobrança foi gerada nem alterada.
+- **Limite do teste:** a implantação e o código publicado foram verificados, mas não houve disparo de evento real Asaas Sandbox nem teste HTTP completo nesta rodada. O evento de estorno, o cancelamento da assinatura e a reconciliação periódica continuam pendentes.
