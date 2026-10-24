@@ -26,6 +26,8 @@ on:
       - 'package*.json'
       - 'scripts/browser-smoke.mjs'
       - 'scripts/asaas-sandbox-e2e.mjs'
+      - 'scripts/test-db-windows.ps1'
+      - '.gitattributes'
       - '.github/workflows/commission-review.yml'
   workflow_dispatch:
 
@@ -88,3 +90,23 @@ jobs:
           VITE_SUPABASE_ANON_KEY: smoke_public_test_key_not_a_secret
           VITE_ASAAS_BILLING_ENABLED: 'false'
       - run: node scripts/browser-smoke.mjs
+
+  windows-script-syntax:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse Windows SQL runner without running or modifying any database
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          $file = (Resolve-Path 'scripts/test-db-windows.ps1').Path
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $file, [ref]$tokens, [ref]$parseErrors
+          ) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host 'PowerShell syntax OK'
