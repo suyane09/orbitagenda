@@ -58,6 +58,9 @@ select public.create_establishment('Bravo Salão', 'salon');
 reset role;
 select set_config('tests.est_a', (select id::text from public.establishments where slug = 'alfa-barbearia'), false);
 select set_config('tests.est_b', (select id::text from public.establishments where slug = 'bravo-salao'), false);
+-- Fixture: assinatura paga somente no banco descartável; não libera contas reais.
+update public.establishment_subscriptions set status='active', payment_due_at=null
+ where establishment_id in (current_setting('tests.est_a')::uuid,current_setting('tests.est_b')::uuid);
 insert into public.memberships (establishment_id, user_id, role)
 values (current_setting('tests.est_a')::uuid, current_setting('tests.s_a')::uuid, 'staff');
 
