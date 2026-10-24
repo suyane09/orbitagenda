@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0'
+import { brazilBillingDate } from '../_shared/billing-date.ts'
 import { reconcileSubscription, type AsaasPayment, type LocalSub } from './reconcile.ts'
 const apiKey = Deno.env.get('ASAAS_API_KEY') ?? ''
 const token = Deno.env.get('ASAAS_RECONCILE_TOKEN') ?? ''
@@ -43,7 +44,7 @@ Deno.serve(async (req) => {
     .eq('asaas_environment', environment).not('asaas_subscription_id', 'is', null).neq('status', 'canceled')
     .order('asaas_synced_at', { ascending: true, nullsFirst: true }).limit(MAX_SUBSCRIPTIONS)
   if (error) return json(503, { message: 'database_unavailable' })
-  const today = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10)
+  const today = brazilBillingDate(new Date())
   let applied = 0, errors = 0
   const divergences: unknown[] = []
   for (const s of subs ?? []) {
