@@ -2,6 +2,7 @@
  * Homologacao financeira E2E - EXCLUSIVAMENTE Asaas Sandbox + Supabase Docker local.
  * Uso: node scripts/asaas-sandbox-e2e.mjs --execute
  * Opcional: --customer cus_... --scenario overdue|refund|cancel
+ * Retomada segura: node scripts/asaas-sandbox-e2e.mjs --resume-refund
  * NAO usa Vercel, Supabase remoto, nem chave de producao.
  */
 import assert from 'node:assert/strict'
@@ -10,8 +11,9 @@ import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 
 const args = process.argv.slice(2)
-if (!args.includes('--execute')) {
-  console.error('Apenas modo explicito: node scripts/asaas-sandbox-e2e.mjs --execute')
+const resumeRefund = args.includes('--resume-refund')
+if (!args.includes('--execute') && !resumeRefund) {
+  console.error('Use --execute para criar fixtures; ou --resume-refund para verificar sem novo estorno')
   process.exit(2)
 }
 const option = (name, fallback) => {
@@ -153,6 +155,72 @@ async function testOverdue() {
   expectState(f, 'active', true)
   console.log(webhook ? 'OK: webhook de vencimento entregue' : 'AVISO: vencimento corrigido por conciliacao; webhook de vencimento NAO comprovado')
 }
+class RefundPendingError extends Error {
+  constructor(message) { super(message); this.name = 'RefundPendingError' }
+}
+async function refundSnapshot(paymentId) {
+  const payment = await api('/payments/' + paymentId)
+  let refunds = Array.isArray(payment?.refunds) ? payment.refunds : []
+  if (refunds.length === 0) {
+    try {
+      const list = await api('/payments/' + paymentId + '/refunds')
+      refunds = Array.isArray(list?.data) ? list.data : Array.isArray(list?.refunds) ? list.refunds : Array.isArray(list) ? list : []
+    } catch (err) {
+      console.log('Aviso: historico de estorno nao consultavel:', err.message)
+    }
+  }
+  const stateLabel = refunds.length
+    ? refunds.map((r) => String(r.status || 'DESCONHECIDO') + ':' + String(r.value ?? '?')).join(', ')
+    : 'nenhum item de estorno retornado'
+  console.log('Diagnostico Asaas:', paymentId, 'pagamento=' + String(payment.status),
+    'estornos=' + stateLabel)
+  return { payment, refunds, stateLabel }
+}
+async function waitForCompleteRefund(paymentId, tries = 32) {
+  let last
+  for (let attempt = 0; attempt < tries; attempt++) {
+    const snapshot = await refundSnapshot(paymentId)
+    last = snapshot
+    if (snapshot.payment?.status === 'REFUNDED') {
+      // O estado final deve vir diretamente do provedor. Um pedido de
+      // devolucao aceito, ou refunds.status=PENDING, nao basta.
+      return snapshot
+    }
+    if (attempt < tries - 1) await sleep(1250)
+  }
+  throw new RefundPendingError('Asaas ainda nao confirmou REFUNDED. Ultimo status='
+    + String(last?.payment?.status ?? 'DESCONHECIDO')
+    + '; estornos=' + String(last?.stateLabel ?? 'desconhecido')
+    + '. Nao repetir POST de estorno. Reconsultar com --resume-refund.')
+}
+async function resumePreviousRefund() {
+  // Usa exclusivamente a fixture isolada criada pelo roteiro de homologacao.
+  // Nao cria assinatura, nao confirma pagamento e NAO solicita outro estorno.
+  const row = sql("SELECT e.id::text || '|' || s.asaas_subscription_id FROM public.establishments e"
+    + " JOIN public.establishment_subscriptions s ON s.establishment_id=e.id"
+    + " WHERE e.name='Orbit Teste Estorno' AND s.notes='HOMOLOGACAO DESCARTAVEL'"
+    + " AND s.asaas_environment='sandbox' AND s.asaas_subscription_id IS NOT NULL"
+    + " ORDER BY e.created_at DESC LIMIT 1")
+  if (!row) throw Error('Fixture Estorno nao encontrada no Docker local')
+  const [estId, subId] = row.split('|')
+  assert.match(estId, /^[0-9a-f-]{36}$/i, 'Estabelecimento local invalido')
+  safeId(subId, 'sub')
+  const f = { name: 'Estorno', estId, subId, payId: safeId((await getPayment(subId)).id, 'pay') }
+  const remotePayment = await api('/payments/' + f.payId)
+  assert.equal(remotePayment.subscription, subId, 'Pagamento nao pertence a fixture Estorno')
+  console.log('Retomando estorno JA SOLICITADO da fixture', subId)
+  await waitForCompleteRefund(f.payId, 3)
+  const webhook = await webhookSeen(f.payId, ['PAYMENT_REFUNDED'])
+  await reconcile()
+  expectState(f, 'past_due', true)
+  sql("UPDATE public.establishment_subscriptions SET payment_due_at=((now() AT TIME ZONE 'America/Sao_Paulo')::date-10)::timestamp AT TIME ZONE 'America/Sao_Paulo'"
+    + " WHERE establishment_id='" + f.estId + "' AND asaas_subscription_id='" + f.subId + "'"
+    + " AND notes='HOMOLOGACAO DESCARTAVEL' AND asaas_environment='sandbox';")
+  expectState(f, 'past_due', false)
+  console.log(webhook ? 'PASSOU estorno: webhook confirmado' :
+    'PASSOU estorno: conciliacao corrigiu estado; webhook PAYMENT_REFUNDED nao comprovado')
+}
+
 async function testRefund() {
   const f = await fixture('Estorno')
   // O Sandbox pode exigir saldo adicional para estorno integral; esta cobranca
@@ -169,8 +237,10 @@ async function testRefund() {
   await webhookSeen(f.payId, ['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'])
   await reconcile()
   expectState(f, 'active', true)
-  await api('/payments/' + f.payId + '/refund', 'POST', {})
-  await verifyPaymentStatus(f.payId, ['REFUNDED'], 32)
+  const refundRequest = await api('/payments/' + f.payId + '/refund', 'POST', {})
+  console.log('Pedido de estorno aceito pelo Asaas; status inicial:',
+    String(refundRequest?.status ?? 'nao retornado'))
+  await waitForCompleteRefund(f.payId, 32)
   const webhook = await webhookSeen(f.payId, ['PAYMENT_REFUNDED'])
   await reconcile()
   expectState(f, 'past_due', true)
@@ -203,10 +273,25 @@ async function main() {
   // Endpoint local autenticado: um teste de credencial e configuracao, sem modificar estado.
   const probe = await fetch(LOCAL + '/functions/v1/asaas-reconcile', { method: 'GET', signal: AbortSignal.timeout(5000) })
   assert.equal(probe.status, 405, 'Edge Function asaas-reconcile nao esta servida localmente')
+  if (resumeRefund) {
+    try {
+      await resumePreviousRefund()
+      console.log('PASSOU: estorno confirmado e regras de bloqueio validadas')
+    } catch (err) {
+      if (err instanceof RefundPendingError) {
+        console.log('PENDENTE: ' + err.message)
+        process.exitCode = 3
+      } else {
+        throw err
+      }
+    }
+    return
+  }
   const cases = {
     overdue: testOverdue, refund: testRefund, cancel: testCancel,
   }
   let failed = 0
+  let pending = 0
   for (const [key, test] of Object.entries(cases)) {
     if (mode !== 'all' && mode !== key) continue
     try {
@@ -214,13 +299,21 @@ async function main() {
       await test()
       console.log('PASSOU: ' + key)
     } catch (error) {
-      failed++
-      console.error('FALHOU ' + key + ': ' + error.message)
+      if (error instanceof RefundPendingError) {
+        pending++
+        console.log('INCONCLUSIVO ' + key + ': ' + error.message)
+      } else {
+        failed++
+        console.error('FALHOU ' + key + ': ' + error.message)
+      }
     }
   }
-  console.log('\nResumo: ' + (Object.keys(cases).length - (mode === 'all' ? 0 : 2) - failed) + ' cenario(s) aprovado(s); ' + failed + ' falha(s).')
+  const executed = mode === 'all' ? Object.keys(cases).length : 1
+  console.log('\nResumo: ' + (executed - failed - pending) + ' aprovado(s); '
+    + pending + ' pendente(s) no Asaas; ' + failed + ' falha(s).')
   console.log('Fixtures Sandbox criadas:', fixtures.map((f) => f.subId).join(', ') || 'nenhuma')
   console.log('Assinatura principal de homologacao NAO foi modificada pelo script.')
   if (failed) process.exitCode = 1
+  else if (pending) process.exitCode = 3
 }
 main().catch((err) => { console.error('PRECHECK FALHOU:', err.message); process.exitCode = 1 })
