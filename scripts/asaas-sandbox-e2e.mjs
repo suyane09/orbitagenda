@@ -3,6 +3,7 @@
  * Uso: node scripts/asaas-sandbox-e2e.mjs --execute
  * Opcional: --customer cus_... --scenario overdue|refund|cancel
  * Retomada segura: node scripts/asaas-sandbox-e2e.mjs --resume-refund
+ * Alternativa UI: --prepare-refund-sim / --check-refund-sim
  * NAO usa Vercel, Supabase remoto, nem chave de producao.
  */
 import assert from 'node:assert/strict'
@@ -12,8 +13,10 @@ import { randomUUID } from 'node:crypto'
 
 const args = process.argv.slice(2)
 const resumeRefund = args.includes('--resume-refund')
-if (!args.includes('--execute') && !resumeRefund) {
-  console.error('Use --execute para criar fixtures; ou --resume-refund para verificar sem novo estorno')
+const prepareRefundSimulation = args.includes('--prepare-refund-sim')
+const checkRefundSimulation = args.includes('--check-refund-sim')
+if (!args.includes('--execute') && !resumeRefund && !prepareRefundSimulation && !checkRefundSimulation) {
+  console.error('Use --execute, --resume-refund, --prepare-refund-sim ou --check-refund-sim')
   process.exit(2)
 }
 const option = (name, fallback) => {
@@ -232,6 +235,77 @@ async function resumePreviousRefund() {
     'PASSOU estorno: conciliacao corrigiu estado; webhook PAYMENT_REFUNDED nao comprovado')
 }
 
+// Alternativa sem suporte e sem repetir pedido de estorno do provedor.
+// Cria/reutiliza uma assinatura descartavel propria para a ACAO DE SANDBOX
+// "Estornar cobranca" (botao laranja), distinta de "Solicitar estorno".
+async function sandboxRefundFixture() {
+  const existing = sql("SELECT e.id::text || '|' || s.asaas_subscription_id FROM public.establishments e"
+    + " JOIN public.establishment_subscriptions s ON s.establishment_id=e.id"
+    + " WHERE e.name='Orbit Teste Estorno UI Sandbox' AND s.notes='HOMOLOGACAO DESCARTAVEL'"
+    + " AND s.asaas_environment='sandbox' AND s.asaas_subscription_id IS NOT NULL"
+    + " ORDER BY e.created_at DESC LIMIT 1")
+  if (existing) {
+    const [estId, subId] = existing.split('|')
+    assert.match(estId, /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i)
+    safeId(subId, 'sub')
+    const f = { name: 'Estorno UI Sandbox', estId, subId,
+      payId: safeId((await getPayment(subId)).id, 'pay') }
+    const payment = await api('/payments/' + f.payId)
+    assert.equal(payment.subscription, subId, 'Cobranca nao pertence a fixture correta')
+    return f
+  }
+  return fixture('Estorno UI Sandbox')
+}
+async function prepareRefundUiSimulation() {
+  const f = await sandboxRefundFixture()
+  const remote = await api('/payments/' + f.payId)
+  if (remote.status === 'PENDING') {
+    await api('/sandbox/payment/' + f.payId + '/confirm', 'POST')
+    await verifyPaymentStatus(f.payId, ['RECEIVED', 'CONFIRMED'])
+  } else if (!['RECEIVED', 'CONFIRMED', 'REFUNDED'].includes(remote.status)) {
+    throw Error('Status inesperado, nenhuma nova operacao solicitada: ' + remote.status)
+  }
+  await reconcile()
+  const refreshed = await api('/payments/' + f.payId)
+  if (refreshed.status === 'REFUNDED') {
+    console.log('Esta fixture ja foi estornada. Execute --check-refund-sim')
+    return
+  }
+  expectState(f, 'active', true)
+  console.log('PRONTO PARA SIMULACAO PELO PAINEL ASAAS SANDBOX')
+  console.log('Cobranca:', f.payId, 'R$ 49,90')
+  console.log('Descricao: TESTE ISOLADO OrbitAgenda Estorno UI Sandbox')
+  console.log('Abra os detalhes desta cobranca. Use SOMENTE o botao na faixa laranja')
+  console.log('"Acoes de Sandbox > Estornar cobranca". NAO use "Solicitar estorno".')
+  console.log('Depois execute --check-refund-sim; nao repita o preparo.')
+}
+async function checkRefundUiSimulation() {
+  const f = await sandboxRefundFixture()
+  const payment = await api('/payments/' + f.payId)
+  assert.equal(payment.subscription, f.subId)
+  console.log('Conferindo SIMULACAO de estorno da cobranca', f.payId)
+  if (payment.status !== 'REFUNDED') {
+    const snapshot = await refundSnapshot(f.payId)
+    throw new RefundPendingError('Sandbox nao confirmou REFUNDED para fixture UI. Status='
+      + payment.status + '; refunds=' + snapshot.stateLabel
+      + '. Nao solicite estorno via API; confira acao na faixa laranja do Sandbox.')
+  }
+  const seen = await webhookSeen(f.payId, ['PAYMENT_REFUNDED'])
+  await reconcile()
+  expectState(f, 'past_due', true)
+  // Exclusivamente assinatura de teste no banco Docker local; nunca move o
+  // calendario da assinatura principal e nunca envia nova ordem ao Asaas.
+  sql("UPDATE public.establishment_subscriptions"
+    + " SET payment_due_at=((now() AT TIME ZONE 'America/Sao_Paulo')::date-10)::timestamp"
+    + " AT TIME ZONE 'America/Sao_Paulo'"
+    + " WHERE establishment_id='" + f.estId + "' AND asaas_subscription_id='" + f.subId + "'"
+    + " AND notes='HOMOLOGACAO DESCARTAVEL' AND asaas_environment='sandbox';")
+  expectState(f, 'past_due', false)
+  console.log(seen ? 'WEBHOOK PAYMENT_REFUNDED comprovado' :
+    'WEBHOOK ainda nao comprovado; conciliacao corrigiu o estado')
+  console.log('PASSOU: estorno via simulacao do Sandbox refletido no OrbitAgenda local')
+}
+
 async function testRefund() {
   const f = await fixture('Estorno')
   // O Sandbox pode exigir saldo adicional para estorno integral; esta cobranca
@@ -284,6 +358,18 @@ async function main() {
   // Endpoint local autenticado: um teste de credencial e configuracao, sem modificar estado.
   const probe = await fetch(LOCAL + '/functions/v1/asaas-reconcile', { method: 'GET', signal: AbortSignal.timeout(5000) })
   assert.equal(probe.status, 405, 'Edge Function asaas-reconcile nao esta servida localmente')
+  if (prepareRefundSimulation || checkRefundSimulation) {
+    try {
+      if (prepareRefundSimulation) await prepareRefundUiSimulation()
+      else await checkRefundUiSimulation()
+    } catch (err) {
+      if (err instanceof RefundPendingError) {
+        console.log('PENDENTE: ' + err.message)
+        process.exitCode = 3
+      } else throw err
+    }
+    return
+  }
   if (resumeRefund) {
     try {
       await resumePreviousRefund()
