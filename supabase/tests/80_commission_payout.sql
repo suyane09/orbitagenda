@@ -11,6 +11,9 @@ set role authenticated;
 select public.create_establishment('Comissao Teste A', 'barbershop');
 reset role;
 select set_config('tests.est', (select id::text from public.establishments where slug='comissao-teste-a'), false);
+-- Fixture paga apenas no CI descartável.
+update public.establishment_subscriptions set status='active', payment_due_at=null
+ where establishment_id=current_setting('tests.est')::uuid;
 
 insert into public.professionals(id,establishment_id,name)
  values ('e1000000-0000-0000-0000-000000000001',current_setting('tests.est')::uuid,'Barbeiro teste');
@@ -36,8 +39,8 @@ insert into public.appointments(id,establishment_id,professional_id,service_id,c
 -- O agendamento precisou ser criado no futuro, por validação de data;
 -- em seguida, backdate controlado para testar a conclusão após o horário.
 alter table public.appointments disable trigger check_appointment;
-update public.appointments set starts_at=(current_date::timestamp + interval '10 hours') at time zone 'America/Maceio',
- ends_at=(current_date::timestamp + interval '10 hours 30 minutes') at time zone 'America/Maceio'
+update public.appointments set starts_at=((current_date - 1)::timestamp + interval '10 hours') at time zone 'America/Maceio',
+ ends_at=((current_date - 1)::timestamp + interval '10 hours 30 minutes') at time zone 'America/Maceio'
  where id='e4000000-0000-0000-0000-000000000001';
 alter table public.appointments enable trigger check_appointment;
 -- A conclusão captura a regra vigente.
