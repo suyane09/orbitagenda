@@ -22,6 +22,7 @@ Deno.serve(async req=>{
   if(req.method!=='POST') return response(405,'method_not_allowed')
   if(!apiKey || !webhookToken || webhookToken.length<32
     || !['sandbox','production'].includes(environment)
+    || (environment==='production' && Deno.env.get('ASAAS_PRODUCTION_CONFIRMED')!=='true')
     || !Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     || !Deno.env.get('SUPABASE_URL')) return response(503,'not_configured')
   const submitted=req.headers.get('asaas-access-token') ?? ''
