@@ -59,7 +59,7 @@ export function reconcileSubscription(opts: {
     divergences.push({ type: 'missing_recent_charge', subscription_id: subId })
   for (const p of sorted) {
     let fresh = false
-    if (p.status === 'OVERDUE' && !p.deleted && local.status === 'active') {
+    // A previous overdue invoice must not become a new divergence after a newer invoice was paid.\n    if (p.status === 'OVERDUE' && !p.deleted && local.status === 'active'\n      && (!local.last_paid_due_date || p.dueDate! > local.last_paid_due_date)) {
       divergences.push({ type: 'overdue_not_blocked', subscription_id: subId, payment_id: p.id }); fresh = true
     }
     if (isPaid(p) && blockedLocally && localDue && p.dueDate! >= localDue) {
