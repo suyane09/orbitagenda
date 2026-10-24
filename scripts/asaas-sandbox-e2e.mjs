@@ -186,6 +186,17 @@ async function waitForCompleteRefund(paymentId, tries = 32) {
       // devolucao aceito, ou refunds.status=PENDING, nao basta.
       return snapshot
     }
+    if (snapshot.refunds.some((r) => r?.status === 'AWAITING_CRITICAL_ACTION_AUTHORIZATION')) {
+      throw new RefundPendingError('Estorno aguarda AUTORIZACAO DE ACAO CRITICA no Asaas Sandbox. '
+        + 'Abra https://sandbox.asaas.com e localize a cobranca ' + paymentId
+        + ' (R$ 49,90), confira a solicitacao e conclua a validacao de seguranca. '
+        + 'No Sandbox, o token de homologacao e 000000 quando solicitado. '
+        + 'Nao repita o POST de estorno. Depois execute --resume-refund.')
+    }
+    if (snapshot.refunds.some((r) => r?.status === 'CANCELLED')) {
+      throw new RefundPendingError('Solicitacao de estorno CANCELADA no Asaas. '
+        + 'Nao e permitido declarar REFUNDED; revise o historico da cobranca no Sandbox.')
+    }
     if (attempt < tries - 1) await sleep(1250)
   }
   throw new RefundPendingError('Asaas ainda nao confirmou REFUNDED. Ultimo status='
