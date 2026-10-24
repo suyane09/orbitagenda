@@ -44,6 +44,8 @@ Deno.serve(async req=>{
       headers:{access_token:apiKey,'User-Agent':'OrbitAgenda/1.0'},
       signal:AbortSignal.timeout(14000),
     })
+    if(res.status===404) return response(404,'asaas_payment_not_found')
+    if(res.status===401 || res.status===403) return response(502,'asaas_auth_failed')
     if(!res.ok) return response(502,'asaas_unavailable')
     actual=await res.json()
   }catch{return response(502,'asaas_unavailable')}
