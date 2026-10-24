@@ -158,10 +158,10 @@ async function testOverdue() {
 class RefundPendingError extends Error {
   constructor(message) { super(message); this.name = 'RefundPendingError' }
 }
-async function refundSnapshot(paymentId) {
+async function refundSnapshot(paymentId, details = true) {
   const payment = await api('/payments/' + paymentId)
   let refunds = Array.isArray(payment?.refunds) ? payment.refunds : []
-  if (refunds.length === 0) {
+  if (details && refunds.length === 0) {
     try {
       const list = await api('/payments/' + paymentId + '/refunds')
       refunds = Array.isArray(list?.data) ? list.data : Array.isArray(list?.refunds) ? list.refunds : Array.isArray(list) ? list : []
@@ -172,14 +172,14 @@ async function refundSnapshot(paymentId) {
   const stateLabel = refunds.length
     ? refunds.map((r) => String(r.status || 'DESCONHECIDO') + ':' + String(r.value ?? '?')).join(', ')
     : 'nenhum item de estorno retornado'
-  console.log('Diagnostico Asaas:', paymentId, 'pagamento=' + String(payment.status),
+  if (details) console.log('Diagnostico Asaas:', paymentId, 'pagamento=' + String(payment.status),
     'estornos=' + stateLabel)
   return { payment, refunds, stateLabel }
 }
 async function waitForCompleteRefund(paymentId, tries = 32) {
   let last
   for (let attempt = 0; attempt < tries; attempt++) {
-    const snapshot = await refundSnapshot(paymentId)
+    const snapshot = await refundSnapshot(paymentId, attempt === 0 || attempt === tries - 1)
     last = snapshot
     if (snapshot.payment?.status === 'REFUNDED') {
       // O estado final deve vir diretamente do provedor. Um pedido de
