@@ -34,7 +34,11 @@ Deno.serve(async req=>{
   const event=input.event
   const payment=input.payment as Record<string,unknown>|undefined
   if(typeof event!=='string' || typeof input.id!=='string' || !input.id) return response(400,'invalid_event')
-  // Only events that can change billing access are processed. Other Asaas\n  // PAYMENT_* events (created, updated, refunded, etc.) must not retry forever\n  // against the RPC, which deliberately accepts only these three states.\n  if(!['PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_OVERDUE'].includes(event))\n    return response(200,'ignored')
+  // Only events that can change billing access are processed. Other Asaas
+  // PAYMENT_* events (created, updated, refunded, etc.) must not retry forever
+  // against the RPC, which deliberately accepts only these three states.
+  if(!['PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_OVERDUE'].includes(event))
+    return response(200,'ignored')
   if(!payment || typeof payment.id!=='string') return response(400,'invalid_payment_event')
   // Provider-side verification: do not trust the JSON event status alone.
   let actual:Record<string,unknown>
@@ -51,7 +55,14 @@ Deno.serve(async req=>{
   if(typeof actual.subscription!=='string' || !actual.subscription.startsWith('sub_')) return response(200,'ignored')
   if(typeof actual.status!=='string' || typeof actual.value!=='number'
     || !Number.isFinite(actual.value) || actual.value<0) return response(422,'invalid_payment')
-  // Asaas is the source of truth: a delayed OVERDUE webhook may arrive\n  // after payment was received. Reconcile using the fetched current status,\n  // never the historical event name alone.\n  const verifiedEvent=actual.status==='RECEIVED' ? 'PAYMENT_RECEIVED'\n    : actual.status==='CONFIRMED' ? 'PAYMENT_CONFIRMED'\n    : actual.status==='OVERDUE' ? 'PAYMENT_OVERDUE' : null\n  if(!verifiedEvent) return response(200,'ignored')\n  const admin=getAdmin()
+  // Asaas is the source of truth: a delayed OVERDUE webhook may arrive
+  // after payment was received. Reconcile using the fetched current status,
+  // never the historical event name alone.
+  const verifiedEvent=actual.status==='RECEIVED' ? 'PAYMENT_RECEIVED'
+    : actual.status==='CONFIRMED' ? 'PAYMENT_CONFIRMED'
+    : actual.status==='OVERDUE' ? 'PAYMENT_OVERDUE' : null
+  if(!verifiedEvent) return response(200,'ignored')
+  const admin=getAdmin()
   const {data: linked, error: lookupError}=await admin.from('establishment_subscriptions')
     .select('establishment_id').eq('asaas_subscription_id',actual.subscription)
     .eq('asaas_environment',environment).maybeSingle()
