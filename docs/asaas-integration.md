@@ -49,3 +49,13 @@ Fontes:
 - https://docs.asaas.com/docs/about-webhooks
 - https://docs.asaas.com/docs/faq-de-webhooks
 - https://supabase.com/docs/guides/functions/secrets
+
+## Reconciliação automática (pendente de homologação no Sandbox)
+
+A função `supabase/functions/asaas-reconcile` compara assinaturas e cobranças no Asaas com os dados locais. Processa no máximo 50 assinaturas por execução e usa os RPCs de faturamento para evitar duplicação de eventos. Assinatura inexistente no provedor e cobrança recente ausente geram divergências para revisão manual; a reconciliação **não cria cobranças**.
+
+**Antes de ativar:** aplique as migrations `20261024120000_asaas_reversals_cancellations.sql` e `20261024130000_asaas_reconciliation.sql` em ambiente de homologação; configure `ASAAS_API_KEY`, `ASAAS_ENVIRONMENT=sandbox`, `ASAAS_RECONCILE_TOKEN` (segredo aleatório com pelo menos 32 caracteres) e credenciais do Supabase; implante a função `asaas-reconcile` com `verify_jwt=false`; agende um POST diário autenticado exclusivamente pelo cabeçalho `x-reconcile-token`. Não registre o token em logs nem no repositório. O uso em produção exige revisão específica e `ASAAS_PRODUCTION_CONFIRMED=true`.
+
+A reserva pública requer `TURNSTILE_SECRET_KEY` e `TURNSTILE_ALLOWED_HOSTNAMES` (lista de hostnames separados por vírgulas). Sem essa lista, o endpoint de reserva retorna 503 por segurança.
+
+**Antes do merge/deploy:** confirmar execução dos testes SQL 97 e 98 e dos testes Vitest, revisar diferenças entre os RPCs e homologar webhook + reconciliação contra o Asaas Sandbox real. Não rodar `supabase db push` diretamente em produção. O PR não implanta nem migra o banco automaticamente.

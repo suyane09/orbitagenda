@@ -53,3 +53,53 @@ do $$ begin
     raise exception 'FAIL duplicate payment event'; end if;
  raise notice 'PASS received webhook activates only corresponding contract';
 end $$;
+
+-- Estornos, chargebacks e cancelamento
+set role service_role;
+do $$ begin
+ if not public.record_asaas_billing_event('evt_paid_1','sub_dummy','pay_r1','PAYMENT_RECEIVED','RECEIVED',4900,'sandbox','2026-11-10') then
+  raise exception 'FAIL paid event'; end if;
+ if not public.record_asaas_billing_reversal('evt_ref_1','sub_dummy','pay_r1','PAYMENT_REFUNDED','REFUNDED',4900,'sandbox','2026-11-10') then
+  raise exception 'FAIL refund not accepted'; end if;
+ if public.record_asaas_billing_reversal('evt_ref_1','sub_dummy','pay_r1','PAYMENT_REFUNDED','REFUNDED',4900,'sandbox','2026-11-10') then
+  raise exception 'FAIL refund replay accepted'; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select status from public.establishment_subscriptions where establishment_id=current_setting('tests.asaas_est')::uuid)<>'past_due'
+   then raise exception 'FAIL refund must move to past_due'; end if;
+ raise notice 'PASS refund reverts access to past_due with grace';
+end $$;
+set role service_role;
+do $$ begin
+ perform public.record_asaas_billing_event('evt_paid_2','sub_dummy','pay_r2','PAYMENT_RECEIVED','RECEIVED',4900,'sandbox','2026-12-10');
+ perform public.record_asaas_billing_reversal('evt_ref_old','sub_dummy','pay_r1','PAYMENT_REFUNDED','REFUNDED',4900,'sandbox','2026-11-10');
+end $$;
+reset role;
+do $$ begin
+ if (select status from public.establishment_subscriptions where establishment_id=current_setting('tests.asaas_est')::uuid)<>'active'
+   then raise exception 'FAIL old refund reverted newer paid invoice'; end if;
+ raise notice 'PASS delayed refund of older invoice ignored';
+end $$;
+set role service_role;
+do $$ begin
+ perform public.record_asaas_billing_reversal('evt_cb_1','sub_dummy','pay_r2','PAYMENT_CHARGEBACK_REQUESTED','CHARGEBACK_REQUESTED',4900,'sandbox','2026-12-10');
+end $$;
+reset role;
+do $$ begin
+ if (select status from public.establishment_subscriptions where establishment_id=current_setting('tests.asaas_est')::uuid)<>'suspended'
+   then raise exception 'FAIL chargeback must suspend'; end if;
+ raise notice 'PASS chargeback suspends';
+end $$;
+set role service_role;
+do $$ begin
+ perform public.record_asaas_billing_reversal('evt_sub_del','sub_dummy','sub_dummy','SUBSCRIPTION_DELETED','DELETED',0,'sandbox',null);
+end $$;
+reset role;
+do $$ begin
+ if (select status from public.establishment_subscriptions where establishment_id=current_setting('tests.asaas_est')::uuid)<>'canceled'
+   then raise exception 'FAIL subscription deletion must cancel'; end if;
+ if has_function_privilege('authenticated','public.record_asaas_billing_reversal(text,text,text,text,text,bigint,text,date)','EXECUTE')
+   then raise exception 'FAIL client can reverse payments'; end if;
+ raise notice 'PASS cancellation and server-only reversal RPC';
+end $$;

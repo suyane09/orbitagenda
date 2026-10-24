@@ -139,6 +139,7 @@ return respond({ slots: slots ?? [] })
       const token = body.turnstile_token
       if (typeof token !== 'string' || token.length < 10 || token.length > 2048) return respond({ error: 'captcha_required' }, 400)
       const hosts = (Deno.env.get('TURNSTILE_ALLOWED_HOSTNAMES') ?? '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean)
+      if (hosts.length === 0) { console.error('public-booking: TURNSTILE_ALLOWED_HOSTNAMES ausente'); return respond({ error: 'service_unavailable' }, 503) }
       const human = await verifyTurnstile({ secret, token, ip, allowedHostnames: hosts })
       if (human === 'unavailable') return respond({ error: 'service_unavailable' }, 503)
       if (human !== 'ok') return respond({ error: 'captcha_failed' }, 403)
