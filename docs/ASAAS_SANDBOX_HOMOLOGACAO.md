@@ -92,3 +92,15 @@ node .\scripts\asaas-sandbox-e2e.mjs --check-refund-sim
 ```
 
 O preparo reutiliza a propria fixture se repetido. A verificacao nao cria nenhuma fixture nem solicita nenhum estorno. **Nao e teste de autorizacao de acao critica em producao**: e um teste de recepcao do estado final, webhook, conciliacao e bloqueio no ambiente Sandbox.
+
+## 6. Resultado real da simulação de estorno no Sandbox (24/10/2026)
+
+Fixture descartável: assinatura `sub_tetr2mo4f95c0x7y`, cobrança `pay_0jx1hsuu620kubkw`, R$ 49,90. O painel mostrou **"Valor parcialmente estornado"**, enquanto a API retornou **`payment.status=RECEIVED` e `refunds=[{status:"CANCELLED",value:49.9}]`**.
+
+**Isto não é estorno concluído.** Segundo https://docs.asaas.com/docs/estornos, apenas `refunds[].status=DONE` confirma valor devolvido; `CANCELLED` significa que a devolução foi cancelada. A mensagem visual do painel não prevalece sobre a conciliação dos estados. Nesse caso o contrato deve permanecer `active` até confirmação verdadeira do Asaas. **Não repetir estorno na mesma cobrança.**
+
+Foi criado diagnóstico negativo em `--check-refund-sim`: ele reconsulta o estado, chama apenas a conciliação local, exige `active` e escrita liberada, e sinaliza **teste negativo aprovado / estorno financeiro integral NÃO homologado** com código de saída 4, para não dar falso verde.
+
+A suíte automatizada de SQL já valida processamento do evento `PAYMENT_REFUNDED` e as alterações `active -> past_due`, tolerância de cinco dias e bloqueio. Isso é teste de regra, **não substitui** a evidência de um estorno financeiro concluído no Sandbox.
+
+A solicitação anterior em `pay_41pnfrerqc0b4qv5` segue um fluxo separado de **`AWAITING_CRITICAL_ACTION_AUTHORIZATION`**, sem confirmação de conclusão. Ela não deve ser repetida.
