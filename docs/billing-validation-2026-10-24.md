@@ -68,3 +68,5 @@ Pós-testes: **0** estabelecimentos, eventos e assinaturas fictícias remanescen
 - **Integridade:** a única assinatura consultada permanece `active`, `payment_due_at=null`, ambiente `sandbox` e `billing_allows_write=true`; a tabela de eventos contém uma linha. Nenhuma cobrança ou assinatura foi modificada nesta rodada.
 - **Limite importante:** a leitura da função publicada e as verificações SQL **não** equivalem a uma requisição HTTP de webhook Asaas Sandbox. Ainda faltam eventos reais de atraso, pagamento, duplicação e fora de ordem, e testes de navegador com Turnstile.
 - **Advisor Supabase:** permanecem avisos sobre dez RPCs `SECURITY DEFINER` executáveis por autenticados, além da proteção contra senhas vazadas desativada. Não foram alteradas sem revisão das autorizações esperadas.
+
+- **Teste HTTP tentado:** uma requisição POST sem token para verificar resposta 401 não chegou ao Supabase: o ambiente de execução não conseguiu resolver o domínio do projeto (`curl: (6) Could not resolve host`). Portanto, **nenhum smoke test HTTP foi validado** nesta rodada; essa limitação não representa falha comprovada do serviço.
