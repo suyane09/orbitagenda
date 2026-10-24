@@ -163,6 +163,9 @@ async function testOverdue() {
 class RefundPendingError extends Error {
   constructor(message) { super(message); this.name = 'RefundPendingError' }
 }
+class RefundCancelledError extends Error {
+  constructor(message) { super(message); this.name = 'RefundCancelledError' }
+}
 async function refundSnapshot(paymentId, details = true) {
   const payment = await api('/payments/' + paymentId)
   let refunds = Array.isArray(payment?.refunds) ? payment.refunds : []
@@ -199,8 +202,9 @@ async function waitForCompleteRefund(paymentId, tries = 32) {
         + 'Nao repita o POST de estorno. Depois execute --resume-refund.')
     }
     if (snapshot.refunds.some((r) => r?.status === 'CANCELLED')) {
-      throw new RefundPendingError('Solicitacao de estorno CANCELADA no Asaas. '
-        + 'Nao e permitido declarar REFUNDED; revise o historico da cobranca no Sandbox.')
+      throw new RefundCancelledError('Solicitacao de estorno CANCELADA no Asaas. '
+        + 'Pagamento ainda nao confirmado como REFUNDED. '
+        + 'Nao solicitar outro estorno na mesma cobranca; motivo nao retornado pela API.')
     }
     if (attempt < tries - 1) await sleep(1250)
   }
@@ -440,6 +444,9 @@ async function main() {
       if (err instanceof RefundPendingError) {
         console.log('PENDENTE: ' + err.message)
         process.exitCode = 3
+      } else if (err instanceof RefundCancelledError) {
+        console.log('CANCELADO NO ASAAS: ' + err.message)
+        process.exitCode = 4
       } else throw err
     }
     return
@@ -452,6 +459,9 @@ async function main() {
       if (err instanceof RefundPendingError) {
         console.log('PENDENTE: ' + err.message)
         process.exitCode = 3
+      } else if (err instanceof RefundCancelledError) {
+        console.log('CANCELADO NO ASAAS: ' + err.message)
+        process.exitCode = 4
       } else {
         throw err
       }
@@ -463,6 +473,7 @@ async function main() {
   }
   let failed = 0
   let pending = 0
+  let cancelled = 0
   for (const [key, test] of Object.entries(cases)) {
     if (mode !== 'all' && mode !== key) continue
     try {
@@ -473,6 +484,9 @@ async function main() {
       if (error instanceof RefundPendingError) {
         pending++
         console.log('INCONCLUSIVO ' + key + ': ' + error.message)
+      } else if (error instanceof RefundCancelledError) {
+        cancelled++
+        console.log('CANCELADO PELO ASAAS ' + key + ': ' + error.message)
       } else {
         failed++
         console.error('FALHOU ' + key + ': ' + error.message)
@@ -480,11 +494,13 @@ async function main() {
     }
   }
   const executed = mode === 'all' ? Object.keys(cases).length : 1
-  console.log('\nResumo: ' + (executed - failed - pending) + ' aprovado(s); '
-    + pending + ' pendente(s) no Asaas; ' + failed + ' falha(s).')
+  console.log('\nResumo: ' + (executed - failed - pending - cancelled) + ' aprovado(s); '
+    + pending + ' pendente(s); ' + cancelled + ' estorno(s) cancelado(s) pelo Asaas; '
+    + failed + ' falha(s).')
   console.log('Fixtures Sandbox criadas:', fixtures.map((f) => f.subId).join(', ') || 'nenhuma')
   console.log('Assinatura principal de homologacao NAO foi modificada pelo script.')
   if (failed) process.exitCode = 1
+  else if (cancelled) process.exitCode = 4
   else if (pending) process.exitCode = 3
 }
 main().catch((err) => { console.error('PRECHECK FALHOU:', err.message); process.exitCode = 1 })
