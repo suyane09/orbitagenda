@@ -12,6 +12,8 @@ on:
       - 'src/features/team/**'
       - 'src/features/subscriptions/**'
       - 'supabase/functions/asaas-*/**'
+      - 'supabase/functions/_shared/**'
+      - 'supabase/config.toml'
       - 'src/features/platform/**'
       - 'src/features/establishments/**'
       - 'src/App.tsx'
