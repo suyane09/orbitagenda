@@ -59,6 +59,13 @@ export function reconcileSubscription(opts: {
     divergences.push({ type: 'missing_recent_charge', subscription_id: subId })
   for (const p of sorted) {
     let fresh = false
+    // Not a completed refund: do NOT revoke a paid plan, but record an
+    // actionable audit divergence until Asaas confirms the final outcome.
+    if (p.status === 'REFUND_IN_PROGRESS' || p.status === 'REFUND_REQUESTED') {
+      divergences.push({ type: 'refund_pending_at_provider', subscription_id: subId, payment_id: p.id })
+    } else if (p.status === 'PARTIALLY_REFUNDED') {
+      divergences.push({ type: 'partial_refund_requires_review', subscription_id: subId, payment_id: p.id })
+    }
     // A previous overdue invoice must not become a new divergence after a newer invoice was paid.
     if (p.status === 'OVERDUE' && !p.deleted && local.status === 'active'
       && (!local.last_paid_due_date || p.dueDate! > local.last_paid_due_date)) {
