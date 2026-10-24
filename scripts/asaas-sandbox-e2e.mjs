@@ -282,14 +282,44 @@ async function prepareRefundUiSimulation() {
 }
 async function checkRefundUiSimulation() {
   const f = await sandboxRefundFixture()
-  const payment = await api('/payments/' + f.payId)
+  const snapshot = await refundSnapshot(f.payId)
+  const { payment, refunds } = snapshot
   assert.equal(payment.subscription, f.subId)
   console.log('Conferindo SIMULACAO de estorno da cobranca', f.payId)
+  const doneCents = refunds
+    .filter((refund) => refund.status === 'DONE')
+    .reduce((sum, refund) => sum + Math.round(Number(refund.value || 0) * 100), 0)
+  const expectedCents = Math.round(Number(payment.value) * 100)
   if (payment.status !== 'REFUNDED') {
-    const snapshot = await refundSnapshot(f.payId)
+    // Asaas: refunds[].status=CANCELLED nao representa valor devolvido,
+    // mesmo quando a interface mostra "Valor parcialmente estornado".
+    if (refunds.some((refund) => refund.status === 'CANCELLED') && doneCents === 0) {
+      await reconcile()
+      expectState(f, 'active', true)
+      console.log('PASSOU TESTE NEGATIVO: estorno CANCELLED nao suspende o contrato.')
+      console.log('ESTORNO INTEGRAL NAO HOMOLOGADO: pagamento permanece ' + payment.status
+        + ' e nenhuma devolucao DONE foi comprovada.')
+      console.log('Nao solicite novo estorno nesta cobranca; o indicador visual do painel'
+        + ' nao substitui a confirmacao da API Asaas.')
+      process.exitCode = 4
+      return
+    }
+    if (doneCents > 0) {
+      await reconcile()
+      expectState(f, 'active', true)
+      throw new RefundPendingError('Devolucao parcial DONE (' + (doneCents / 100).toFixed(2)
+        + ' BRL) nao equivale ao estorno integral; pagamento=' + payment.status)
+    }
     throw new RefundPendingError('Sandbox nao confirmou REFUNDED para fixture UI. Status='
       + payment.status + '; refunds=' + snapshot.stateLabel
-      + '. Nao solicite estorno via API; confira acao na faixa laranja do Sandbox.')
+      + '. NAO clique novamente em estornar esta cobranca.')
+  }
+  // Estado final exige o status REFUNDED; se o Asaas fornecer dados de
+  // estornos individuais, a soma dos DONE deve cobrir a cobranca integral.
+  if (refunds.length > 0 && (expectedCents <= 0 || doneCents < expectedCents)) {
+    throw new Error('API inconsistente: pagamento REFUNDED mas refunds DONE somam '
+      + (doneCents / 100).toFixed(2) + ' BRL de ' + (expectedCents / 100).toFixed(2)
+      + ' BRL. Teste bloqueado para revisao.')
   }
   const seen = await webhookSeen(f.payId, ['PAYMENT_REFUNDED'])
   await reconcile()
