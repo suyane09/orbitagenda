@@ -50,9 +50,20 @@ Deno.serve(async (req) => {
     const subId = s.asaas_subscription_id as string
     try {
       const prov = await asaas('/subscriptions/' + encodeURIComponent(subId))
-      const payments = prov.body ? await listPayments(subId) : []
+      let provider = prov.body
+      if (prov.status === 404) {
+        // 404 alone is NOT evidence of cancellation. Confirm the exact ID in
+        // Asaas's deleted-only list, scoped to this local establishment.
+        const deleted = await asaas('/subscriptions?deletedOnly=true&externalReference='
+          + encodeURIComponent(s.establishment_id) + '&limit=100')
+        if (!Array.isArray(deleted.body?.data)) throw new Error('invalid_deleted_subscriptions')
+        if (deleted.body.data.some((entry: { id?: string }) => entry?.id === subId)) {
+          provider = { id: subId, deleted: true }
+        }
+      }
+      const payments = provider && !provider.deleted ? await listPayments(subId) : []
       const local: LocalSub = { status: s.status, payment_due_at: s.payment_due_at, last_paid_due_date: s.last_paid_due_date }
-      const result = reconcileSubscription({ subId, env: environment, today, local, provider: prov.body, payments })
+      const result = reconcileSubscription({ subId, env: environment, today, local, provider, payments })
       divergences.push(...result.divergences)
       let subscriptionFailed = false
       for (const plan of result.plans) {
