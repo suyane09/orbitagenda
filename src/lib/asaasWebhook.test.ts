@@ -12,10 +12,11 @@ vi.mock('npm:@supabase/supabase-js@2.118.0', () => ({
 const TOKEN = 't'.repeat(40)
 let handler: (req: Request) => Promise<Response>
 
-function stubEnv() {
+function stubEnv(overrides: Record<string, string> = {}) {
   const env: Record<string, string> = {
     ASAAS_API_KEY: 'sandbox_key', ASAAS_WEBHOOK_TOKEN: TOKEN, ASAAS_ENVIRONMENT: 'sandbox',
     SUPABASE_URL: 'http://x.invalid', SUPABASE_SERVICE_ROLE_KEY: 'srv',
+    ...overrides,
   }
   vi.stubGlobal('Deno', { env: { get: (k: string) => env[k] }, serve: (h: typeof handler) => { handler = h } })
 }
@@ -34,6 +35,14 @@ describe('asaas-webhook · estornos, chargebacks e cancelamento', () => {
     await import(/* @vite-ignore */ edgeFunction)
   })
   it('rejeita token inválido', async () => { expect((await post({}, 'x'.repeat(40))).status).toBe(401) })
+  it('recusa acao financeira em producao sem liberacao explicita do ambiente', async () => {
+    vi.resetModules()
+    stubEnv({ ASAAS_ENVIRONMENT: 'production' })
+    const edgeFunction = '../../supabase/functions/asaas-webhook/index.ts'
+    await import(/* @vite-ignore */ edgeFunction)
+    expect((await post({ id: 'evt_prod', event: 'PAYMENT_RECEIVED', payment: { id: 'pay_1' } })).status).toBe(503)
+    expect(rpc).not.toHaveBeenCalled()
+  })
   const pay = { id: 'pay_1', subscription: 'sub_1', value: 49, dueDate: '2026-11-10' }
   it('estorno confirmado no Asaas chama a RPC de reversão', async () => {
     asaas({ ...pay, status: 'REFUNDED' })
