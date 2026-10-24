@@ -86,7 +86,7 @@ export default function SubscriptionPage() {
             <p className="mt-2 text-xs text-slate">A confirmação do pagamento pode levar alguns instantes.</p>
           </div>
         </div>
-        {sub.notes&&<p className="mx-6 mb-6 rounded-xl bg-paper px-4 py-3 text-sm leading-relaxed text-slate sm:mx-8">{sub.notes}</p>}
+        {sub.notes&&!sub.asaas_subscription_id&&<p className="mx-6 mb-6 rounded-xl bg-paper px-4 py-3 text-sm leading-relaxed text-slate sm:mx-8">{sub.notes}</p>}
       </section>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(240px,.65fr)]">
         {plan?.monthly_price_cents != null && plan.monthly_price_cents > 0
@@ -99,7 +99,7 @@ export default function SubscriptionPage() {
             <li><span className="mr-2 font-semibold text-foreground">02.</span> Autorize a assinatura quando a contratação estiver disponível.</li>
             <li><span className="mr-2 font-semibold text-foreground">03.</span> Acompanhe a confirmação do pagamento nesta página.</li>
           </ol>
-          <p className="mt-5 border-t border-hairline pt-4 text-xs leading-relaxed text-slate">A inadimplência não bloqueia o acesso automaticamente. Em caso de divergência, procure o suporte antes de tentar contratar novamente.</p>
+          <p className="mt-5 border-t border-hairline pt-4 text-xs leading-relaxed text-slate">A mensalidade é recorrente. O prazo de tolerância previsto é de cinco dias após o vencimento; a suspensão automática depende da sincronização do vencimento e da proteção no servidor. Em caso de divergência, procure o suporte.</p>
         </aside>
       </div>
     </>}
