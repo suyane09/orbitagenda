@@ -82,7 +82,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
         env:
-          VITE_SUPABASE_URL: https://smoke-tests.supabase.co
+          VITE_SUPABASE_URL: http://127.0.0.1:54321
           VITE_SUPABASE_ANON_KEY: smoke_public_test_key_not_a_secret
           VITE_ASAAS_BILLING_ENABLED: 'false'
       - run: node scripts/browser-smoke.mjs
