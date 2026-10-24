@@ -54,13 +54,23 @@ Deno.serve(async (req) => {
       const local: LocalSub = { status: s.status, payment_due_at: s.payment_due_at, last_paid_due_date: s.last_paid_due_date }
       const result = reconcileSubscription({ subId, env: environment, today, local, provider: prov.body, payments })
       divergences.push(...result.divergences)
+      let subscriptionFailed = false
       for (const plan of result.plans) {
         const { data, error: rpcError } = await admin.rpc(plan.rpc, plan.args)
-        if (rpcError) { errors++; break }
+        if (rpcError) {
+          errors++
+          subscriptionFailed = true
+          break
+        }
         if (data === true) applied++
       }
-      await admin.from('establishment_subscriptions').update({ asaas_synced_at: new Date().toISOString() })
-        .eq('establishment_id', s.establishment_id)
+      // A partial failure must not mark the subscription as successfully synced.
+      if (!subscriptionFailed) {
+        const { error: syncError } = await admin.from('establishment_subscriptions')
+          .update({ asaas_synced_at: new Date().toISOString() })
+          .eq('establishment_id', s.establishment_id)
+        if (syncError) errors++
+      }
     } catch { errors++ }
   }
   await admin.rpc('record_asaas_reconciliation_run', { p_environment: environment, p_checked: subs?.length ?? 0,
