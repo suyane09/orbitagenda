@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0'
+import { brazilBillingDate } from '../_shared/billing-date.ts'
 
 const url = Deno.env.get('SUPABASE_URL') ?? ''
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -89,8 +90,7 @@ Deno.serve(async req => {
       email:auth.user.email ?? undefined, externalReference:estId,
     })
     if (typeof customer.id !== 'string' || !customer.id.startsWith('cus_')) throw new Error('unexpected_customer')
-    const today = new Date()
-    const nextDueDate = today.toISOString().slice(0,10)
+    const nextDueDate = brazilBillingDate(new Date())
     const subscription = await requestAsaas('/subscriptions','POST',{
       customer:customer.id, billingType:payload.billingType,
       value:plan.monthly_price_cents / 100, nextDueDate, cycle:'MONTHLY',
