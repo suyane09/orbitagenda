@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+const fsSpecifier = 'node:fs'
+const { readFileSync } = await import(/* @vite-ignore */ fsSpecifier)
 import { brazilBillingDate } from '../../supabase/functions/_shared/billing-date'
 
 const config = readFileSync(new URL('../../supabase/config.toml', import.meta.url), 'utf8')
