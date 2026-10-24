@@ -73,7 +73,12 @@ Deno.serve(async (req) => {
       }
     } catch { errors++ }
   }
-  await admin.rpc('record_asaas_reconciliation_run', { p_environment: environment, p_checked: subs?.length ?? 0,
-    p_applied: applied, p_errors: errors, p_divergences: divergences })
-  return json(200, { checked: subs?.length ?? 0, applied, errors, divergences: divergences.length })
+  const { error: auditError } = await admin.rpc('record_asaas_reconciliation_run', {
+    p_environment: environment, p_checked: subs?.length ?? 0,
+    p_applied: applied, p_errors: errors, p_divergences: divergences,
+  })
+  if (auditError) return json(503, { message: 'reconciliation_audit_failed' })
+  const summary = { checked: subs?.length ?? 0, applied, errors, divergences: divergences.length }
+  // Non-2xx tells the caller/monitor that a partial reconciliation needs attention.
+  return json(errors > 0 ? 503 : 200, summary)
 })
