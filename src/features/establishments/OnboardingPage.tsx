@@ -31,7 +31,7 @@ export default function OnboardingPage() {
     try {
       const created = await createEstablishment(parsed.data)
       await refresh(created.id)
-      navigate('/app', { replace: true })
+      navigate('/app/assinatura', { replace: true })
     } catch (err) {
       setFormError(describeError(err))
     } finally {
@@ -43,7 +43,7 @@ export default function OnboardingPage() {
   return (
     <AuthLayout
       title="Cadastre seu estabelecimento"
-      subtitle="Você será o proprietário e poderá convidar sua equipe depois."
+      subtitle="Você será o proprietário. O plano mensal será apresentado antes de qualquer cobrança."
       footer={hasEstablishment
         ? <Link to="/app" className="font-medium text-orbit hover:underline">Voltar ao painel</Link>
         : <button type="button" onClick={() => void signOut()} className="font-medium text-orbit hover:underline">Sair da conta</button>}

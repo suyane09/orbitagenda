@@ -44,6 +44,7 @@ export default function SubscriptionPage() {
   },[id,owner])
   useEffect(()=>{void load()},[load])
   if(!owner)return <p className="text-sm text-slate">Área disponível apenas para o proprietário.</p>
+  const awaitingFirstPayment = sub?.status === 'past_due' && !sub?.asaas_subscription_id
   const statusTone = sub?.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : sub?.status === 'trialing' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-paper text-slate border-hairline'
   return <div className="mx-auto max-w-5xl space-y-6 pb-14">
     <header className="flex flex-wrap items-end justify-between gap-4">
@@ -69,7 +70,7 @@ export default function SubscriptionPage() {
             <h2 className="mt-2 font-display text-3xl font-semibold">{plan?.name ?? 'Plano cadastrado'}</h2>
             <p className="mt-2 text-sm text-slate">Gestão do seu estabelecimento em um só lugar.</p>
           </div>
-          <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold ${statusTone}`}>{names[sub.status]??sub.status}</span>
+          <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold ${statusTone}`}>{awaitingFirstPayment ? 'Aguardando contratação' : (names[sub.status]??sub.status)}</span>
         </div>
         <div className="grid gap-0 sm:grid-cols-2">
           <div className="border-b border-hairline p-6 sm:border-b-0 sm:border-r sm:p-8">
@@ -81,9 +82,9 @@ export default function SubscriptionPage() {
             <p className="mt-2 text-xs text-slate">Valor definido pelo plano contratado.</p>
           </div>
           <div className="p-6 sm:p-8">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate">Próximo vencimento pendente</p>
-            <p className="mt-3 font-display text-2xl font-semibold">{sub.payment_due_at ? new Date(sub.payment_due_at).toLocaleDateString('pt-BR', {timeZone:'America/Sao_Paulo'}) : 'Sem cobrança em atraso'}</p>
-            <p className="mt-2 text-xs text-slate">Se houver atraso, o acesso às operações é suspenso após cinco dias. A confirmação do pagamento pode levar alguns instantes.</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate">{awaitingFirstPayment ? 'Primeira mensalidade' : 'Próximo vencimento pendente'}</p>
+            <p className="mt-3 font-display text-2xl font-semibold">{awaitingFirstPayment ? 'Nenhuma cobrança emitida' : sub.payment_due_at ? new Date(sub.payment_due_at).toLocaleDateString('pt-BR', {timeZone:'America/Sao_Paulo'}) : 'Sem cobrança em atraso'}</p>
+            <p className="mt-2 text-xs text-slate">{awaitingFirstPayment ? 'O acesso será liberado após a confirmação do primeiro pagamento.' : 'Se houver atraso, o acesso às operações é suspenso após cinco dias. A confirmação do pagamento pode levar alguns instantes.'}</p>
           </div>
         </div>
         {sub.notes&&!sub.asaas_subscription_id&&<p className="mx-6 mb-6 rounded-xl bg-paper px-4 py-3 text-sm leading-relaxed text-slate sm:mx-8">{sub.notes}</p>}
