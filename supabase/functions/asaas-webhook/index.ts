@@ -85,23 +85,37 @@ Deno.serve(async req=>{
 async function handleSubscriptionDeleted(input:Record<string,unknown>):Promise<Response>{
   const sub=input.subscription as Record<string,unknown>|undefined
   if(!sub || typeof sub.id!=='string' || !sub.id.startsWith('sub_')) return response(400,'invalid_subscription_event')
-  let actual:Record<string,unknown>
-  try{
-    const res=await fetch(apiBase+'/subscriptions/'+encodeURIComponent(sub.id),{
-      headers:{access_token:apiKey,'User-Agent':'OrbitAgenda/1.0'},
-      signal:AbortSignal.timeout(14000),
-    })
-    if(!res.ok) return response(502,'asaas_unavailable')
-    actual=await res.json()
-  }catch{return response(502,'asaas_unavailable')}
-  if(actual.id!==sub.id) return response(422,'invalid_subscription')
-  if(actual.deleted!==true && actual.status!=='INACTIVE') return response(200,'ignored')
   const admin=getAdmin()
   const {data: linked, error: lookupError}=await admin.from('establishment_subscriptions')
     .select('establishment_id').eq('asaas_subscription_id',sub.id)
     .eq('asaas_environment',environment).maybeSingle()
   if(lookupError)return response(503,'database_unavailable')
   if(!linked)return response(200,'ignored')
+  let actual:Record<string,unknown>
+  try{
+    const headers={access_token:apiKey,'User-Agent':'OrbitAgenda/1.0'}
+    const res=await fetch(apiBase+'/subscriptions/'+encodeURIComponent(sub.id),{
+      headers,signal:AbortSignal.timeout(14000),
+    })
+    if(res.status===404){
+      // A deleted subscription may return 404 on the detail endpoint.
+      // Confirm deletion with the provider's deleted-only list, not just a webhook body.
+      const deleted=await fetch(apiBase+'/subscriptions?deletedOnly=true&externalReference='
+        +encodeURIComponent(linked.establishment_id)+'&limit=100',{
+        headers,signal:AbortSignal.timeout(14000),
+      })
+      if(!deleted.ok)return response(502,'asaas_unavailable')
+      const body=await deleted.json()
+      if(!Array.isArray(body?.data))return response(502,'asaas_unavailable')
+      if(!body.data.some((item:{id?:string})=>item?.id===sub.id))return response(502,'asaas_unavailable')
+      actual={id:sub.id,deleted:true}
+    }else{
+      if(!res.ok)return response(502,'asaas_unavailable')
+      actual=await res.json()
+    }
+  }catch{return response(502,'asaas_unavailable')}
+  if(actual.id!==sub.id) return response(422,'invalid_subscription')
+  if(actual.deleted!==true && actual.status!=='INACTIVE') return response(200,'ignored')
   const {error}=await admin.rpc('record_asaas_billing_reversal',{
     p_event_id:input.id,p_asaas_subscription_id:sub.id,p_payment_id:sub.id,
     p_event_type:'SUBSCRIPTION_DELETED',p_payment_status:'DELETED',
