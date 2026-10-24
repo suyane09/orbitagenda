@@ -81,11 +81,10 @@ select tests.expect_count($$
   where n.nspname in ('public','private') and p.prosecdef
     and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%')$$, 0,
   'toda função SECURITY DEFINER fixa search_path');
-do $diag$ declare v text; begin select string_agg(n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', ', ') into v from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private') and p.prosecdef and has_function_privilege('anon',p.oid,'execute'); raise notice 'ANON_DEFINER_DIAGNOSTIC: %', v; end $diag$;
-select tests.expect_count($
+select tests.expect_count($$
   select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname in ('public','private') and p.prosecdef and has_function_privilege('anon', p.oid, 'execute') and p.proname <> 'create_public_booking'$$, 0,
-  'anon não executa funções SECURITY DEFINER além da reserva pública controlada');
+  where n.nspname in ('public','private') and p.prosecdef and has_function_privilege('anon', p.oid, 'execute')$, 0,
+  'anon não executa funções SECURITY DEFINER de public/private');
 select tests.expect_count($$
   select 1 from information_schema.role_table_grants
   where grantee = 'anon' and table_schema = 'public'$$, 0,
