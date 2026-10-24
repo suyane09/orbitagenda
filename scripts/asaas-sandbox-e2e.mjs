@@ -4,6 +4,7 @@
  * Opcional: --customer cus_... --scenario overdue|refund|cancel
  * Retomada segura: node scripts/asaas-sandbox-e2e.mjs --resume-refund
  * Alternativa UI: --prepare-refund-sim / --check-refund-sim
+ * Diagnostico seguro: --diagnose-refunds (somente consultas GET)
  * NAO usa Vercel, Supabase remoto, nem chave de producao.
  */
 import assert from 'node:assert/strict'
@@ -15,8 +16,9 @@ const args = process.argv.slice(2)
 const resumeRefund = args.includes('--resume-refund')
 const prepareRefundSimulation = args.includes('--prepare-refund-sim')
 const checkRefundSimulation = args.includes('--check-refund-sim')
-if (!args.includes('--execute') && !resumeRefund && !prepareRefundSimulation && !checkRefundSimulation) {
-  console.error('Use --execute, --resume-refund, --prepare-refund-sim ou --check-refund-sim')
+const diagnoseRefunds = args.includes('--diagnose-refunds')
+if (!args.includes('--execute') && !resumeRefund && !prepareRefundSimulation && !checkRefundSimulation && !diagnoseRefunds) {
+  console.error('Use --execute, --resume-refund, --prepare-refund-sim, --check-refund-sim ou --diagnose-refunds')
   process.exit(2)
 }
 const option = (name, fallback) => {
@@ -207,6 +209,46 @@ async function waitForCompleteRefund(paymentId, tries = 32) {
     + '; estornos=' + String(last?.stateLabel ?? 'desconhecido')
     + '. Nao repetir POST de estorno. Reconsultar com --resume-refund.')
 }
+// Consulta somente GET das duas fixtures existentes, sem movimentar dinheiro,
+// inserir dados ou chamar conciliacao. Imprime apenas campos financeiros
+// autorizados para diagnostico; nunca exibe token, cliente, CPF ou dados bancarios.
+async function diagnoseExistingRefunds() {
+  for (const [estName, label] of [
+    ['Orbit Teste Estorno', 'Pedido original de estorno API'],
+    ['Orbit Teste Estorno UI Sandbox', 'Simulacao de estorno Sandbox'],
+  ]) {
+    const row = sql("SELECT s.asaas_subscription_id FROM public.establishments e"
+      + " JOIN public.establishment_subscriptions s ON s.establishment_id=e.id"
+      + " WHERE e.name='" + estName + "' AND s.notes='HOMOLOGACAO DESCARTAVEL'"
+      + " AND s.asaas_environment='sandbox' AND s.asaas_subscription_id IS NOT NULL"
+      + " ORDER BY e.created_at DESC LIMIT 1")
+    if (!row) { console.log('Fixture indisponivel:', label); continue }
+    const subId = safeId(row, 'sub')
+    const payId = safeId((await getPayment(subId)).id, 'pay')
+    const { payment, refunds } = await refundSnapshot(payId, true)
+    assert.equal(payment.subscription, subId, 'Cobranca nao pertence a fixture de teste')
+    console.log('--- ' + label + ' ---')
+    console.log('Assinatura:', subId, '| Pagamento:', payId)
+    console.log('Status:', String(payment.status), '| Valor:', Number(payment.value))
+    console.log('Data de pagamento:', String(payment.paymentDate ?? payment.confirmedDate ?? 'nao retornada'))
+    console.log('Qtd. estornos:', refunds.length)
+    for (const refund of refunds) {
+      console.log('Estorno:', 'status=' + String(refund.status),
+        'valor=' + String(refund.value),
+        'criado=' + String(refund.dateCreated ?? 'nao retornado'))
+      // Campos opcionais: o Asaas nao garante um motivo tecnico no payload.
+      for (const field of ['cancellationReason', 'failReason', 'errorMessage', 'reason']) {
+        const value = refund?.[field]
+        if (typeof value === 'string' && value.length > 0) {
+          console.log('Detalhe ' + field + ':', value.slice(0, 150))
+        }
+      }
+    }
+  }
+  console.log('DIAGNOSTICO SOMENTE LEITURA: nenhuma solicitacao de estorno foi enviada.')
+  console.log('CANCELLED sem motivo retornado nao permite diagnosticar a causa tecnica pela API.')
+}
+
 async function resumePreviousRefund() {
   // Usa exclusivamente a fixture isolada criada pelo roteiro de homologacao.
   // Nao cria assinatura, nao confirma pagamento e NAO solicita outro estorno.
@@ -389,6 +431,7 @@ async function main() {
   // Endpoint local autenticado: um teste de credencial e configuracao, sem modificar estado.
   const probe = await fetch(LOCAL + '/functions/v1/asaas-reconcile', { method: 'GET', signal: AbortSignal.timeout(5000) })
   assert.equal(probe.status, 405, 'Edge Function asaas-reconcile nao esta servida localmente')
+  if (diagnoseRefunds) { await diagnoseExistingRefunds(); return }
   if (prepareRefundSimulation || checkRefundSimulation) {
     try {
       if (prepareRefundSimulation) await prepareRefundUiSimulation()
