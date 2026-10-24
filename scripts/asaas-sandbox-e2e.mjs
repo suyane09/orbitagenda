@@ -238,7 +238,7 @@ async function resumePreviousRefund() {
 // Alternativa sem suporte e sem repetir pedido de estorno do provedor.
 // Cria/reutiliza uma assinatura descartavel propria para a ACAO DE SANDBOX
 // "Estornar cobranca" (botao laranja), distinta de "Solicitar estorno".
-async function sandboxRefundFixture() {
+async function sandboxRefundFixture(allowCreate = false) {
   const existing = sql("SELECT e.id::text || '|' || s.asaas_subscription_id FROM public.establishments e"
     + " JOIN public.establishment_subscriptions s ON s.establishment_id=e.id"
     + " WHERE e.name='Orbit Teste Estorno UI Sandbox' AND s.notes='HOMOLOGACAO DESCARTAVEL'"
@@ -254,10 +254,11 @@ async function sandboxRefundFixture() {
     assert.equal(payment.subscription, subId, 'Cobranca nao pertence a fixture correta')
     return f
   }
+  if (!allowCreate) throw Error('Fixture de simulacao nao encontrada. Execute --prepare-refund-sim primeiro.')
   return fixture('Estorno UI Sandbox')
 }
 async function prepareRefundUiSimulation() {
-  const f = await sandboxRefundFixture()
+  const f = await sandboxRefundFixture(true)
   const remote = await api('/payments/' + f.payId)
   if (remote.status === 'PENDING') {
     await api('/sandbox/payment/' + f.payId + '/confirm', 'POST')
