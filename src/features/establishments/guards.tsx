@@ -17,14 +17,14 @@ export function RequireEstablishment() {
     if (!establishmentId || isSuperadmin) return
     let cancelled = false
     void supabase.from('establishment_subscriptions')
-      .select('status,current_period_end,asaas_subscription_id')
+      .select('status,payment_due_at,asaas_subscription_id')
       .eq('establishment_id', establishmentId).maybeSingle()
       .then(({ data, error }) => {
         if (cancelled) return
         if (error) { setState({ id: establishmentId, blocked: false, error: true }); return }
         // O vencimento deve ser preenchido a partir da cobrança real do Asaas.
         // Sem vencimento confirmado, nunca bloquear por inferência.
-        const due = data?.current_period_end ? Date.parse(data.current_period_end) : NaN
+        const due = data?.payment_due_at ? Date.parse(data.payment_due_at) : NaN
         const graceDeadline = due + 5 * 86400000
         const blocked = !!data?.asaas_subscription_id
           && data.status === 'past_due'
