@@ -24,9 +24,19 @@ async function asaas(path: string): Promise<{ status: number; body: any }> {
 async function listPayments(subId: string): Promise<AsaasPayment[]> {
   const out: AsaasPayment[] = []
   for (let offset = 0; offset < 1000; offset += 100) {
-    const { body } = await asaas(`/subscriptions/${encodeURIComponent(subId)}/payments?limit=100&offset=${offset}`)
-    out.push(...(body?.data ?? []))
-    if (!body?.hasMore) break
+    const { status, body } = await asaas(`/subscriptions/${encodeURIComponent(subId)}/payments?limit=100&offset=${offset}`)
+    if (status === 404 || !Array.isArray(body?.data)
+      || typeof body.hasMore !== 'boolean') throw new Error('invalid_asaas_payment_listing')
+    for (const payment of body.data) {
+      if (payment?.subscription && payment.subscription !== subId)
+        throw new Error('payment_belongs_to_another_subscription')
+      if (typeof payment?.id !== 'string' || typeof payment?.status !== 'string'
+        || typeof payment?.value !== 'number' || !Number.isFinite(payment.value))
+        throw new Error('invalid_asaas_payment_record')
+      out.push(payment as AsaasPayment)
+    }
+    if (!body.hasMore) return out
+    if (offset === 900) throw new Error('too_many_asaas_payments_for_one_run')
   }
   return out
 }
@@ -52,6 +62,8 @@ Deno.serve(async (req) => {
     try {
       const prov = await asaas('/subscriptions/' + encodeURIComponent(subId))
       let provider = prov.body
+      if (prov.status !== 404 && (typeof provider?.id !== 'string' || provider.id !== subId))
+        throw new Error('unexpected_asaas_subscription')
       if (prov.status === 404) {
         // 404 alone is NOT evidence of cancellation. Confirm the exact ID in
         // Asaas's deleted-only list, scoped to this local establishment.
