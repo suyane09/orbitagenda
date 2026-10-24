@@ -42,6 +42,12 @@ export function reconcileSubscription(opts: {
   const divergences: Divergence[] = []
   const plans: Plan[] = []
   if (!provider) return { plans, divergences: [{ type: 'subscription_missing_at_provider', subscription_id: subId }] }
+  // EXPIRED and unknown provider states are not proof of deletion. Do not
+  // invent a cancellation or reactivation; surface them for manual review.
+  if (provider.deleted !== true && provider.status !== 'ACTIVE' && provider.status !== 'INACTIVE') {
+    return { plans, divergences: [{ type: 'subscription_unexpected_status', subscription_id: subId,
+      detail: String(provider.status ?? 'UNKNOWN') }] }
+  }
   if (provider.deleted === true || provider.status === 'INACTIVE') {
     if (local.status !== 'canceled') {
       divergences.push({ type: 'subscription_inactive_at_provider', subscription_id: subId, detail: `local=${local.status}` })
