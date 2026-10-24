@@ -67,6 +67,8 @@ Atualize o script e consulte, estando no diretorio `orbitagenda-homologacao`:
 $ErrorActionPreference = "Stop"; New-Item -ItemType Directory -Path ".\scripts" -Force | Out-Null; Invoke-WebRequest -Uri "https://raw.githubusercontent.com/suyane09/orbitagenda/fix/asaas-reconciliation-overdue-order-20261024/scripts/asaas-sandbox-e2e.mjs" -OutFile ".\scripts\asaas-sandbox-e2e.mjs" -UseBasicParsing -ErrorAction Stop; node ".\scripts\asaas-sandbox-e2e.mjs" --resume-refund
 ```
 
+Se a consulta retornar `refunds[].status=AWAITING_CRITICAL_ACTION_AUTHORIZATION`, o Asaas esta aguardando a **autorizacao de uma acao critica**; nao e um atraso de polling. Entre em https://sandbox.asaas.com, localize a cobranca de teste e conclua a autorizacao solicitada pelo proprio Asaas. No Sandbox, o codigo de teste documentado para validacoes de token e `000000` **somente quando solicitado pela interface** (https://docs.asaas.com/docs/como-testar-a%C3%A7%C3%B5es-cr%C3%ADticas). O script para imediatamente neste estado e nao repete o pedido de devolucao.
+
 Se ainda estiver `REFUND_IN_PROGRESS` ou `refunds[].status=PENDING`, o resultado sera **PENDENTE/INCONCLUSIVO**, nao falha da regra de acesso. O script nao alterara estado financeiro do provedor e podera ser consultado novamente. **Somente quando o Asaas confirmar `REFUNDED`** ele chamara a conciliacao local e verificara `past_due`, carencia de cinco dias e bloqueio apos o prazo em registro descartavel.
 
 Nao publicar nem mesclar as PRs de cobranca ate registrar evidencia de estorno concluido e confirmar que todas as etapas de homologacao exigidas passaram.
