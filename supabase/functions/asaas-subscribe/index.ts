@@ -8,7 +8,7 @@ const apiBase = environment === 'production' ? 'https://api.asaas.com/v3' : 'htt
 const apiKey = Deno.env.get('ASAAS_API_KEY') ?? ''
 const billingEnabled = Deno.env.get('ASAAS_BILLING_ENABLED') === 'true'
 const allowedOrigin = Deno.env.get('ASAAS_ALLOWED_ORIGIN') ?? 'https://orbitagenda.vercel.app'
-const cors = { 'Access-Control-Allow-Origin': allowedOrigin, 'Access-Control-Allow-Headers': 'authorization, apikey, content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Vary': 'Origin' }
+const cors = { 'Access-Control-Allow-Origin': allowedOrigin, 'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Vary': 'Origin' }
 const reply = (status: number, message: string, extras: Record<string, unknown> = {}) =>
   new Response(JSON.stringify({ message, ...extras }), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
 const uuid = (x: unknown): x is string => typeof x === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(x)
