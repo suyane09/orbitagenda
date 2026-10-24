@@ -12,7 +12,7 @@ begin
     raise exception 'FAIL  %', p_label;
   end if;
   raise notice 'PASS  %', p_label;
-end $;
+end $$;
 grant execute on function tests.ok(boolean,text) to authenticated;
 
 insert into auth.users (id, email) values
