@@ -23,6 +23,7 @@ on:
       - 'src/components/layout/AppShell.tsx'
       - 'package*.json'
       - 'scripts/browser-smoke.mjs'
+      - 'scripts/asaas-sandbox-e2e.mjs'
       - '.github/workflows/commission-review.yml'
   workflow_dispatch:
 
@@ -40,6 +41,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: node --check scripts/asaas-sandbox-e2e.mjs
       - run: npm test
       - run: npm run build
 
