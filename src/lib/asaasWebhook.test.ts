@@ -95,6 +95,16 @@ describe('asaas-webhook · estornos, chargebacks e cancelamento', () => {
     expect(await response.json()).toEqual({ message: 'asaas_payment_not_found' })
     expect(rpc).not.toHaveBeenCalled()
   })
+  it('estorno em andamento não vira estorno concluído no webhook', async () => {
+    asaas({ ...pay, status: 'REFUND_IN_PROGRESS' })
+    expect((await post({ id: 'evt_refund_pending', event: 'PAYMENT_REFUND_IN_PROGRESS', payment: { id: 'pay_1' } })).status).toBe(200)
+    expect(rpc).not.toHaveBeenCalled()
+  })
+  it('estorno parcial não é confundido com cancelamento integral de acesso', async () => {
+    asaas({ ...pay, status: 'PARTIALLY_REFUNDED' })
+    expect((await post({ id: 'evt_refund_partial', event: 'PAYMENT_PARTIALLY_REFUNDED', payment: { id: 'pay_1' } })).status).toBe(200)
+    expect(rpc).not.toHaveBeenCalled()
+  })
   it('erro de autenticação da API Asaas não é confundido com pagamento ausente', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 401 })))
     expect((await post({ id: 'evt_401', event: 'PAYMENT_RECEIVED', payment: { id: 'pay_1' } })).status).toBe(502)
