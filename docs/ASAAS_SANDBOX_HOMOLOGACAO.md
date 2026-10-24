@@ -72,3 +72,23 @@ Se a consulta retornar `refunds[].status=AWAITING_CRITICAL_ACTION_AUTHORIZATION`
 Se ainda estiver `REFUND_IN_PROGRESS` ou `refunds[].status=PENDING`, o resultado sera **PENDENTE/INCONCLUSIVO**, nao falha da regra de acesso. O script nao alterara estado financeiro do provedor e podera ser consultado novamente. **Somente quando o Asaas confirmar `REFUNDED`** ele chamara a conciliacao local e verificara `past_due`, carencia de cinco dias e bloqueio apos o prazo em registro descartavel.
 
 Nao publicar nem mesclar as PRs de cobranca ate registrar evidencia de estorno concluido e confirmar que todas as etapas de homologacao exigidas passaram.
+
+## 5. Alternativa se o Asaas deixar um estorno via API preso em autorizacao critica
+
+O painel mostra duas opcoes diferentes: a funcionalidade **"Estornar cobranca" dentro de "Acoes de Sandbox"** e a funcionalidade financeira normal **"Solicitar estorno"**. Quando o pedido normal esta em `AWAITING_CRITICAL_ACTION_AUTHORIZATION`, nao gere outro estorno **naquela cobranca**, nem desative a protecao da conta.
+
+Para validar a transicao real `REFUNDED` no Sandbox sem depender desse pedido, o script oferece um segundo fluxo isolado, que prepara uma nova cobranca de homologacao R$ 49,90 vinculada ao Docker LOCAL:
+
+```powershell
+node .\scripts\asaas-sandbox-e2e.mjs --prepare-refund-sim
+```
+
+Depois, na interface do **Asaas Sandbox**, localize exatamente a descricao **TESTE ISOLADO OrbitAgenda Estorno UI Sandbox** e confira o ID `pay_...` mostrado no terminal. Clique **apenas em "Estornar cobranca" no quadro laranja "Acoes de Sandbox"**. A opcao "Solicitar estorno" e o fluxo financeiro normal e nao deve ser usada nesse cenario. O botao de simulacao aparece no screenshot do painel, mas **ainda precisa ser validado no ambiente desta conta**; nao ha garantia antecipada de que dara status `REFUNDED`.
+
+Para consultar a mudanca de status, auditar webhooks e validar os bloqueios sem criar novas operacoes no Asaas:
+
+```powershell
+node .\scripts\asaas-sandbox-e2e.mjs --check-refund-sim
+```
+
+O preparo reutiliza a propria fixture se repetido. A verificacao nao cria nenhuma fixture nem solicita nenhum estorno. **Nao e teste de autorizacao de acao critica em producao**: e um teste de recepcao do estado final, webhook, conciliacao e bloqueio no ambiente Sandbox.
