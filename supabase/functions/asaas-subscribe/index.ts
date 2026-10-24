@@ -97,10 +97,13 @@ Deno.serve(async req => {
       description:`Orbit Agenda — ${plan.name}`.slice(0,500), externalReference:estId,
     })
     if (typeof subscription.id !== 'string' || !subscription.id.startsWith('sub_')) throw new Error('unexpected_subscription')
-    const { error: saveError } = await admin.from('establishment_subscriptions')
+    const { data: saved, error: saveError } = await admin.from('establishment_subscriptions')
       .update({asaas_customer_id:customer.id,asaas_subscription_id:subscription.id,asaas_synced_at:new Date().toISOString()})
       .eq('establishment_id',estId).not('asaas_provisioning_started_at','is',null)
-    if (saveError) throw new Error('failed_to_persist_subscription')
+      .is('asaas_subscription_id',null).select('establishment_id').maybeSingle()
+    // Updating zero rows is not a success. Preserve the provisioning reservation
+    // for manual recovery instead of creating an orphaned recurring charge.
+    if (saveError || !saved) throw new Error('failed_to_persist_subscription')
     return reply(200,'Assinatura criada no Asaas. Aguarde a confirmação de pagamento.',{
       subscriptionId:subscription.id,environment,
     })
