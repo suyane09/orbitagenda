@@ -22,6 +22,7 @@ on:
       - 'supabase/tests/**'
       - 'src/components/layout/AppShell.tsx'
       - 'package*.json'
+      - 'scripts/browser-smoke.mjs'
       - '.github/workflows/commission-review.yml'
   workflow_dispatch:
 
@@ -63,3 +64,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash supabase/tests/run.sh
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # Instalação isolada para testes E2E; não altera package.json ou lockfile.
+      - run: npm install --no-save --package-lock=false playwright@1.58.2
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://smoke-tests.supabase.co
+          VITE_SUPABASE_ANON_KEY: smoke_public_test_key_not_a_secret
+          VITE_ASAAS_BILLING_ENABLED: 'false'
+      - run: node scripts/browser-smoke.mjs
