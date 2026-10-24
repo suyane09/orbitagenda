@@ -10,7 +10,6 @@ const getAdmin = () => createClient(Deno.env.get('SUPABASE_URL') ?? '',
 const response = (status:number,message:string) => new Response(JSON.stringify({message}),
   {status,headers:{'content-type':'application/json'}})
 async function tokenMatches(received:string):Promise<boolean> {
-  // Compare digest bytes rather than early-exiting string equality.
   const encoder=new TextEncoder()
   const a=new Uint8Array(await crypto.subtle.digest('SHA-256',encoder.encode(webhookToken)))
   const b=new Uint8Array(await crypto.subtle.digest('SHA-256',encoder.encode(received)))
@@ -34,13 +33,11 @@ Deno.serve(async req=>{
   const event=input.event
   const payment=input.payment as Record<string,unknown>|undefined
   if(typeof event!=='string' || typeof input.id!=='string' || !input.id) return response(400,'invalid_event')
-  // Only events that can change billing access are processed. Other Asaas
-  // PAYMENT_* events (created, updated, refunded, etc.) must not retry forever
-  // against the RPC, which deliberately accepts only these three states.
-  if(!['PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_OVERDUE'].includes(event))
+  const REVERSALS=['PAYMENT_REFUNDED','PAYMENT_CHARGEBACK_REQUESTED','PAYMENT_DELETED']
+  if(event==='SUBSCRIPTION_DELETED' || event==='SUBSCRIPTION_INACTIVATED') return await handleSubscriptionDeleted(input)
+  if(!['PAYMENT_RECEIVED','PAYMENT_CONFIRMED','PAYMENT_OVERDUE',...REVERSALS].includes(event))
     return response(200,'ignored')
   if(!payment || typeof payment.id!=='string') return response(400,'invalid_payment_event')
-  // Provider-side verification: do not trust the JSON event status alone.
   let actual:Record<string,unknown>
   try{
     const res=await fetch(apiBase+'/payments/'+encodeURIComponent(payment.id),{
@@ -51,14 +48,14 @@ Deno.serve(async req=>{
     actual=await res.json()
   }catch{return response(502,'asaas_unavailable')}
   if(typeof actual.id!=='string' || actual.id!==payment.id) return response(422,'invalid_payment')
-  // Ignore legitimate payments in the same Asaas account unrelated to Orbit Agenda.
   if(typeof actual.subscription!=='string' || !actual.subscription.startsWith('sub_')) return response(200,'ignored')
   if(typeof actual.status!=='string' || typeof actual.value!=='number'
     || !Number.isFinite(actual.value) || actual.value<0) return response(422,'invalid_payment')
-  // Asaas is the source of truth: a delayed OVERDUE webhook may arrive
-  // after payment was received. Reconcile using the fetched current status,
-  // never the historical event name alone.
-  const verifiedEvent=actual.status==='RECEIVED' ? 'PAYMENT_RECEIVED'
+  const CHARGEBACK=['CHARGEBACK_REQUESTED','CHARGEBACK_DISPUTE','AWAITING_CHARGEBACK_REVERSAL']
+  const verifiedEvent=actual.deleted===true ? 'PAYMENT_DELETED'
+    : actual.status==='REFUNDED' ? 'PAYMENT_REFUNDED'
+    : CHARGEBACK.includes(actual.status) ? 'PAYMENT_CHARGEBACK_REQUESTED'
+    : actual.status==='RECEIVED' ? 'PAYMENT_RECEIVED'
     : actual.status==='CONFIRMED' ? 'PAYMENT_CONFIRMED'
     : actual.status==='OVERDUE' ? 'PAYMENT_OVERDUE' : null
   if(!verifiedEvent) return response(200,'ignored')
@@ -68,7 +65,8 @@ Deno.serve(async req=>{
     .eq('asaas_environment',environment).maybeSingle()
   if(lookupError)return response(503,'database_unavailable')
   if(!linked)return response(200,'ignored')
-  const {error} = await admin.rpc('record_asaas_billing_event',{
+  const rpcName=(REVERSALS.includes(verifiedEvent)) ? 'record_asaas_billing_reversal' : 'record_asaas_billing_event'
+  const {error} = await admin.rpc(rpcName,{
     p_event_id:input.id,
     p_asaas_subscription_id:actual.subscription,
     p_payment_id:actual.id,
@@ -78,9 +76,35 @@ Deno.serve(async req=>{
     p_environment:environment,
     p_due_date:typeof actual.dueDate==='string' && /^\d{4}-\d{2}-\d{2}$/.test(actual.dueDate) ? actual.dueDate : null,
   })
-  if(error){
-    // A retry is safer than acknowledging a failed database transaction.
-    return response(503,'database_unavailable')
-  }
+  if(error)return response(503,'database_unavailable')
   return response(200,'ok')
 })
+
+async function handleSubscriptionDeleted(input:Record<string,unknown>):Promise<Response>{
+  const sub=input.subscription as Record<string,unknown>|undefined
+  if(!sub || typeof sub.id!=='string' || !sub.id.startsWith('sub_')) return response(400,'invalid_subscription_event')
+  let actual:Record<string,unknown>
+  try{
+    const res=await fetch(apiBase+'/subscriptions/'+encodeURIComponent(sub.id),{
+      headers:{access_token:apiKey,'User-Agent':'OrbitAgenda/1.0'},
+      signal:AbortSignal.timeout(14000),
+    })
+    if(!res.ok) return response(502,'asaas_unavailable')
+    actual=await res.json()
+  }catch{return response(502,'asaas_unavailable')}
+  if(actual.id!==sub.id) return response(422,'invalid_subscription')
+  if(actual.deleted!==true && actual.status!=='INACTIVE') return response(200,'ignored')
+  const admin=getAdmin()
+  const {data: linked, error: lookupError}=await admin.from('establishment_subscriptions')
+    .select('establishment_id').eq('asaas_subscription_id',sub.id)
+    .eq('asaas_environment',environment).maybeSingle()
+  if(lookupError)return response(503,'database_unavailable')
+  if(!linked)return response(200,'ignored')
+  const {error}=await admin.rpc('record_asaas_billing_reversal',{
+    p_event_id:input.id,p_asaas_subscription_id:sub.id,p_payment_id:sub.id,
+    p_event_type:'SUBSCRIPTION_DELETED',p_payment_status:'DELETED',
+    p_amount_cents:0,p_environment:environment,p_due_date:null,
+  })
+  if(error)return response(503,'database_unavailable')
+  return response(200,'ok')
+}
