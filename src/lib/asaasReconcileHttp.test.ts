@@ -62,7 +62,8 @@ describe('asaas-reconcile · HTTP, erros e exclusão confirmada', () => {
       SUPABASE_SERVICE_ROLE_KEY: 'fake_service_role_key',
     } as Record<string, string>)[key] }, serve: (fn: typeof handler) => { handler = fn } })
     vi.stubGlobal('fetch', mockProvider())
-    await import('../../supabase/functions/asaas-reconcile/index.ts')
+    const edgeFunction = '../../supabase/functions/asaas-reconcile/index.ts'
+    await import(/* @vite-ignore */ edgeFunction)
   })
 
   it('recusa token ausente/incorreto e metodo GET', async () => {
