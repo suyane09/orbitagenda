@@ -103,7 +103,7 @@ Foi criado diagnóstico negativo em `--check-refund-sim`: ele reconsulta o estad
 
 A suíte automatizada de SQL já valida processamento do evento `PAYMENT_REFUNDED` e as alterações `active -> past_due`, tolerância de cinco dias e bloqueio. Isso é teste de regra, **não substitui** a evidência de um estorno financeiro concluído no Sandbox.
 
-A solicitação anterior em `pay_41pnfrerqc0b4qv5` segue um fluxo separado de **`AWAITING_CRITICAL_ACTION_AUTHORIZATION`**, sem confirmação de conclusão. Ela não deve ser repetida.
+**Atualização 24/10/2026:** a solicitação anterior em `pay_41pnfrerqc0b4qv5` **não está mais aguardando autorização**. Em nova consulta passou a `CANCELLED`, conforme registrado na seção 8. Não deve ser repetida.
 
 ## 7. Auditoria remota de código e segurança (24/10/2026)
 
@@ -130,4 +130,6 @@ Para a última tentativa de diagnóstico sem qualquer alteração de estado, con
 node .\scripts\asaas-sandbox-e2e.mjs --diagnose-refunds
 ```
 
-O modo imprime apenas status, valor, data e possíveis campos técnicos, sem dados de clientes nem tokens e sem `POST` de cobrança/estorno, sem conciliar e sem alterar banco. Se o retorno não trouxer motivo, a causa depende de informações internas do Asaas/suporte. Os testes de regressão em CI já validam o tratamento de estornos cancelados, parciais e confirmados de forma simulada.
+O modo imprime apenas status, valor, data e possíveis campos técnicos, sem dados de clientes nem tokens e sem `POST` de cobrança/estorno, sem conciliar e sem alterar banco. **Consulta realizada em 24/10/2026:** as duas cobranças estavam `RECEIVED` e tinham um estorno de R$ 49,90 `CANCELLED`, com datas de criação `2026-10-24 15:31:53` (API) e `2026-10-24 16:28:32` (simulação). **Nenhum campo de motivo técnico foi retornado**. Portanto, esgotamos os dados acessíveis pelo diagnóstico, e a causa depende de informações internas do Asaas/suporte. Não repetiremos simulações nessas cobranças.
+
+**Melhoria no runner:** `--resume-refund` agora distingue cancelamento definitivo de pendência: mostra `CANCELADO NO ASAAS` e retorna exit code 4. Antes usava incorretamente o rótulo `PENDENTE` para `CANCELLED`. Os testes de regressão em CI já validam o tratamento de estornos cancelados, parciais e confirmados de forma simulada.
