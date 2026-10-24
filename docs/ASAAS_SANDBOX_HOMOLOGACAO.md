@@ -52,3 +52,21 @@ Esperado após a correção proposta na PR #16: **404 `asaas_payment_not_found`*
 - Nenhuma alteração no banco, webhook ou configuração de produção.
 
 **Estado atual:** etapas de autenticação do webhook e build/testes locais foram realizadas anteriormente; os critérios de pagamento/atraso acima ainda exigem execução e evidências no Sandbox local.
+
+## 4. Retomar estorno PIX solicitado que ficou pendente
+
+No teste local de 2026-10-24, `overdue` e `cancel` passaram; o pedido `POST /payments/{id}/refund` da fixture de estorno foi aceito pelo Asaas, mas a cobranca nao retornou `REFUNDED` no periodo curto de consulta. **Isto nao confirma nem refuta o estorno final.**
+
+O Asaas distingue `PAYMENT_REFUND_IN_PROGRESS` (em processamento) de `PAYMENT_REFUNDED` (concluido). Em `payment.refunds[]`, `status=PENDING` significa solicitado, enquanto `status=DONE` significa concluido: https://docs.asaas.com/docs/payment-events e https://docs.asaas.com/docs/refunds .
+
+**Nao execute `--execute` novamente apenas para verificar o estorno**: isto criaria mais assinaturas e poderia solicitar outro estorno. Use a retomada que identifica a fixture local isolada `Orbit Teste Estorno`, consulta o pagamento e seus estornos e **nao chama novamente o endpoint de estorno**.
+
+Atualize o script e consulte, estando no diretorio `orbitagenda-homologacao`:
+
+```powershell
+$ErrorActionPreference = "Stop"; New-Item -ItemType Directory -Path ".\scripts" -Force | Out-Null; Invoke-WebRequest -Uri "https://raw.githubusercontent.com/suyane09/orbitagenda/fix/asaas-reconciliation-overdue-order-20261024/scripts/asaas-sandbox-e2e.mjs" -OutFile ".\scripts\asaas-sandbox-e2e.mjs" -UseBasicParsing -ErrorAction Stop; node ".\scripts\asaas-sandbox-e2e.mjs" --resume-refund
+```
+
+Se ainda estiver `REFUND_IN_PROGRESS` ou `refunds[].status=PENDING`, o resultado sera **PENDENTE/INCONCLUSIVO**, nao falha da regra de acesso. O script nao alterara estado financeiro do provedor e podera ser consultado novamente. **Somente quando o Asaas confirmar `REFUNDED`** ele chamara a conciliacao local e verificara `past_due`, carencia de cinco dias e bloqueio apos o prazo em registro descartavel.
+
+Nao publicar nem mesclar as PRs de cobranca ate registrar evidencia de estorno concluido e confirmar que todas as etapas de homologacao exigidas passaram.
