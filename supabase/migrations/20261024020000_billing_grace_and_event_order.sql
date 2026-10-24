@@ -139,7 +139,7 @@ end $$;
 -- Frontend must query the same server rule for owners and staff. Expose only
 -- a boolean to authenticated members; never disclose other tenants' status.
 create or replace function public.is_establishment_billing_blocked(p_establishment_id uuid)
-returns boolean language plpgsql stable security definer set search_path=''
+returns boolean language plpgsql stable security invoker set search_path=''
 as $$
 begin
   if p_establishment_id is null or not private.is_member(p_establishment_id) then
