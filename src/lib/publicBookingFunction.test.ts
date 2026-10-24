@@ -69,6 +69,19 @@ describe('public-booking · CAPTCHA, limites, conflito e assinatura', () => {
     rpc.mockImplementation(async (n: string) => n === 'check_rate_limit' ? { data: [{ allowed: true }], error: null } : { data: null, error: { code: '42501', message: 'subscription_suspended' } })
     const r = await call(valid); expect(r.status).toBe(403); expect((await r.json()).error).toBe('subscription_suspended')
   })
+  it('catálogo público informa fuso do estabelecimento para os horários da reserva', async () => {
+    const r = await call({ action: 'catalog', slug: 'barbearia' })
+    expect(r.status).toBe(200)
+    expect((await r.json()).establishment).toMatchObject({
+      name: 'Barbearia', slug: 'barbearia', timezone: 'America/Maceio',
+    })
+  })
+  it('data impossível do calendário é rejeitada antes de reservar', async () => {
+    for (const date of ['2026-02-30', '2026-02-29', '2026-04-31']) {
+      expect((await call({ ...valid, date })).status).toBe(400)
+    }
+    expect(booked()).toBe(false)
+  })
   it('entradas inválidas: horário, data e telefone gigante', async () => {
     for (const patch of [{ time: '25:99' }, { date: '2026-13-45' }, { customer_phone: '9'.repeat(40) }, { professional_id: 'x' }])
       expect((await call({ ...valid, ...patch })).status).toBe(400)
