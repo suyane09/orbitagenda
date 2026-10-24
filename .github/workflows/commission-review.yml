@@ -2,6 +2,7 @@ name: Commission review checks
 on:
   push:
     branches:
+      - main
       - 'feature/commission-2c-panel-review'
   pull_request:
     paths:
