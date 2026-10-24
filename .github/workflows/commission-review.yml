@@ -12,6 +12,8 @@ on:
       - 'src/features/team/**'
       - 'src/features/subscriptions/**'
       - 'supabase/functions/asaas-*/**'
+      - 'supabase/functions/_shared/**'
+      - 'supabase/config.toml'
       - 'src/features/platform/**'
       - 'src/features/establishments/**'
       - 'src/App.tsx'
@@ -22,6 +24,10 @@ on:
       - 'supabase/tests/**'
       - 'src/components/layout/AppShell.tsx'
       - 'package*.json'
+      - 'scripts/browser-smoke.mjs'
+      - 'scripts/asaas-sandbox-e2e.mjs'
+      - 'scripts/test-db-windows.ps1'
+      - '.gitattributes'
       - '.github/workflows/commission-review.yml'
   workflow_dispatch:
 
@@ -39,6 +45,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: node --check scripts/asaas-sandbox-e2e.mjs
       - run: npm test
       - run: npm run build
 
@@ -63,3 +70,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash supabase/tests/run.sh
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # Instalação isolada para testes E2E; não altera package.json ou lockfile.
+      - run: npm install --no-save --package-lock=false playwright@1.58.2
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: http://127.0.0.1:54321
+          VITE_SUPABASE_ANON_KEY: smoke_public_test_key_not_a_secret
+          VITE_ASAAS_BILLING_ENABLED: 'false'
+      - run: node scripts/browser-smoke.mjs
+
+  windows-script-syntax:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse Windows SQL runner without running or modifying any database
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          $file = (Resolve-Path 'scripts/test-db-windows.ps1').Path
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $file, [ref]$tokens, [ref]$parseErrors
+          ) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host 'PowerShell syntax OK'

@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0'
+import { brazilBillingDate } from '../_shared/billing-date.ts'
 import { reconcileSubscription, type AsaasPayment, type LocalSub } from './reconcile.ts'
 const apiKey = Deno.env.get('ASAAS_API_KEY') ?? ''
 const token = Deno.env.get('ASAAS_RECONCILE_TOKEN') ?? ''
@@ -23,9 +24,19 @@ async function asaas(path: string): Promise<{ status: number; body: any }> {
 async function listPayments(subId: string): Promise<AsaasPayment[]> {
   const out: AsaasPayment[] = []
   for (let offset = 0; offset < 1000; offset += 100) {
-    const { body } = await asaas(`/subscriptions/${encodeURIComponent(subId)}/payments?limit=100&offset=${offset}`)
-    out.push(...(body?.data ?? []))
-    if (!body?.hasMore) break
+    const { status, body } = await asaas(`/subscriptions/${encodeURIComponent(subId)}/payments?limit=100&offset=${offset}`)
+    if (status === 404 || !Array.isArray(body?.data)
+      || typeof body.hasMore !== 'boolean') throw new Error('invalid_asaas_payment_listing')
+    for (const payment of body.data) {
+      if (payment?.subscription && payment.subscription !== subId)
+        throw new Error('payment_belongs_to_another_subscription')
+      if (typeof payment?.id !== 'string' || typeof payment?.status !== 'string'
+        || typeof payment?.value !== 'number' || !Number.isFinite(payment.value))
+        throw new Error('invalid_asaas_payment_record')
+      out.push(payment as AsaasPayment)
+    }
+    if (!body.hasMore) return out
+    if (offset === 900) throw new Error('too_many_asaas_payments_for_one_run')
   }
   return out
 }
@@ -43,27 +54,55 @@ Deno.serve(async (req) => {
     .eq('asaas_environment', environment).not('asaas_subscription_id', 'is', null).neq('status', 'canceled')
     .order('asaas_synced_at', { ascending: true, nullsFirst: true }).limit(MAX_SUBSCRIPTIONS)
   if (error) return json(503, { message: 'database_unavailable' })
-  const today = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10)
+  const today = brazilBillingDate(new Date())
   let applied = 0, errors = 0
   const divergences: unknown[] = []
   for (const s of subs ?? []) {
     const subId = s.asaas_subscription_id as string
     try {
       const prov = await asaas('/subscriptions/' + encodeURIComponent(subId))
-      const payments = prov.body ? await listPayments(subId) : []
+      let provider = prov.body
+      if (prov.status !== 404 && (typeof provider?.id !== 'string' || provider.id !== subId))
+        throw new Error('unexpected_asaas_subscription')
+      if (prov.status === 404) {
+        // 404 alone is NOT evidence of cancellation. Confirm the exact ID in
+        // Asaas's deleted-only list, scoped to this local establishment.
+        const deleted = await asaas('/subscriptions?deletedOnly=true&externalReference='
+          + encodeURIComponent(s.establishment_id) + '&limit=100')
+        if (!Array.isArray(deleted.body?.data)) throw new Error('invalid_deleted_subscriptions')
+        if (deleted.body.data.some((entry: { id?: string }) => entry?.id === subId)) {
+          provider = { id: subId, deleted: true }
+        }
+      }
+      const payments = provider && !provider.deleted ? await listPayments(subId) : []
       const local: LocalSub = { status: s.status, payment_due_at: s.payment_due_at, last_paid_due_date: s.last_paid_due_date }
-      const result = reconcileSubscription({ subId, env: environment, today, local, provider: prov.body, payments })
+      const result = reconcileSubscription({ subId, env: environment, today, local, provider, payments })
       divergences.push(...result.divergences)
+      let subscriptionFailed = false
       for (const plan of result.plans) {
         const { data, error: rpcError } = await admin.rpc(plan.rpc, plan.args)
-        if (rpcError) { errors++; break }
+        if (rpcError) {
+          errors++
+          subscriptionFailed = true
+          break
+        }
         if (data === true) applied++
       }
-      await admin.from('establishment_subscriptions').update({ asaas_synced_at: new Date().toISOString() })
-        .eq('establishment_id', s.establishment_id)
+      // A partial failure must not mark the subscription as successfully synced.
+      if (!subscriptionFailed) {
+        const { error: syncError } = await admin.from('establishment_subscriptions')
+          .update({ asaas_synced_at: new Date().toISOString() })
+          .eq('establishment_id', s.establishment_id)
+        if (syncError) errors++
+      }
     } catch { errors++ }
   }
-  await admin.rpc('record_asaas_reconciliation_run', { p_environment: environment, p_checked: subs?.length ?? 0,
-    p_applied: applied, p_errors: errors, p_divergences: divergences })
-  return json(200, { checked: subs?.length ?? 0, applied, errors, divergences: divergences.length })
+  const { error: auditError } = await admin.rpc('record_asaas_reconciliation_run', {
+    p_environment: environment, p_checked: subs?.length ?? 0,
+    p_applied: applied, p_errors: errors, p_divergences: divergences,
+  })
+  if (auditError) return json(503, { message: 'reconciliation_audit_failed' })
+  const summary = { checked: subs?.length ?? 0, applied, errors, divergences: divergences.length }
+  // Non-2xx tells the caller/monitor that a partial reconciliation needs attention.
+  return json(errors > 0 ? 503 : 200, summary)
 })

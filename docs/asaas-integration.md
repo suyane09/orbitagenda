@@ -12,7 +12,7 @@
 
 ## Estado atual de implantação
 
-As Edge Functions estão publicadas no Supabase e há uma assinatura de teste vinculada ao Asaas **Sandbox** com pagamento registrado. A função `asaas-subscribe` exige JWT e a `asaas-webhook` valida um token próprio. A política de cinco dias e a reativação foram testadas no banco com estabelecimentos fictícios e rollback, mas **o ciclo completo via webhook real do Asaas Sandbox ainda não foi homologado**. A produção não deve ser ativada antes dessa validação. A flag `VITE_ASAAS_BILLING_ENABLED` controla a exibição da interface; conferir sua configuração na Vercel antes de oferecer o serviço.
+As Edge Functions estão publicadas no Supabase e há uma assinatura de teste vinculada ao Asaas **Sandbox** com pagamento registrado. A função `asaas-subscribe` exige JWT e a `asaas-webhook` valida um token próprio. A política de cinco dias e a reativação passaram por testes isolados, e o runner de Sandbox validou atraso, regularização e cancelamento com fixtures locais. **O ciclo completo via webhook real do Asaas Sandbox e o estorno integral concluído (REFUNDED/DONE) ainda não foram homologados.** Duas tentativas de devolução resultaram em CANCELLED, sem motivo técnico retornado. A produção não deve ser ativada antes dessa validação e da revisão de migrações. A flag `VITE_ASAAS_BILLING_ENABLED` controla a exibição da interface; conferir sua configuração na Vercel antes de oferecer o serviço.
 
 ## Configuração e homologação obrigatórias antes de cobrar em produção
 
@@ -37,7 +37,7 @@ Usar primeiro a conta [Asaas Sandbox](https://sandbox.asaas.com/). Documentaçã
 
 ### Avisos importantes
 
-- A integração não faz débito em cartão. O bloqueio por inadimplência é automático após cinco dias completos da data de vencimento, desde que o webhook tenha registrado a cobrança vencida; não há bloqueio baseado apenas em suposições de vencimento. **Estornos, chargebacks, cobranças faltantes e reconciliação periódica com o Asaas ainda exigem implementação e homologação.**
+- A integração não faz débito em cartão. O bloqueio por inadimplência é automático após cinco dias completos da data de vencimento, desde que o webhook tenha registrado a cobrança vencida; não há bloqueio baseado apenas em suposições de vencimento. **O tratamento de estornos, chargebacks e cobranças ausentes e a função de reconciliação estão implementados nesta branch, mas sua execução externa/operacional ainda exige homologação no Sandbox, agendamento e monitoramento.**
 - Em uma falha de rede ou processamento depois da criação do cliente/assinatura no Asaas, **não repetir a tentativa automaticamente**. Revisar o Asaas, localizar os IDs gerados e conciliar com o registro antes de liberar outra contratação.
 - Sem a chave e os tokens configurados, as funções devem **falhar fechadas** com `503`. Uma implantação de código não ativa cobrança real.
 - Não executar `supabase db push` por causa do histórico de migrações antigas ainda divergente.

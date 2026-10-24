@@ -29,7 +29,8 @@ const validId = (s: unknown): s is string =>
   typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
 const validDate = (s: unknown): s is string =>
   typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) &&
-  !Number.isNaN(Date.parse(s + 'T12:00:00Z'))
+  !Number.isNaN(Date.parse(s + 'T12:00:00Z')) &&
+  new Date(s + 'T12:00:00Z').toISOString().slice(0, 10) === s
 
 export default {
   fetch: withSupabase({ auth: ['publishable'] }, async (req, ctx) => {
@@ -82,7 +83,7 @@ export default {
       ])
       if (services.error || professionals.error || links.error)
         return respond({ error: 'server_error' }, 500)
-      return respond({ establishment: { name: est.name, slug: est.slug, business_type: est.business_type },
+      return respond({ establishment: { name: est.name, slug: est.slug, business_type: est.business_type, timezone: est.timezone },
         services: services.data, professionals: professionals.data, professional_services: links.data })
     }
 

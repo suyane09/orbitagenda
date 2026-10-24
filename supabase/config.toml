@@ -424,3 +424,19 @@ entrypoint = "./functions/public-booking/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/public-booking/*.html" ]
+
+# Asaas authenticates with a dedicated `asaas-access-token` header, not a Supabase JWT.
+# Keep the function's own token validation; the gateway must let the request through.
+[functions.asaas-webhook]
+enabled = true
+verify_jwt = false
+
+# Scheduled/manual reconciliation authenticates using x-reconcile-token (SHA-256 checked).
+[functions.asaas-reconcile]
+enabled = true
+verify_jwt = false
+
+# A user session JWT is mandatory for customer-initiated subscription creation.
+[functions.asaas-subscribe]
+enabled = true
+verify_jwt = true

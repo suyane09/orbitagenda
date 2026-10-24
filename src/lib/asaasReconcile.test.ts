@@ -33,6 +33,49 @@ describe('reconciliação Asaas · regras puras', () => {
     expect(r.divergences.map((d) => d.type)).toContain('local_blocked_provider_paid')
     expect(r.plans[0]?.rpc).toBe('record_asaas_billing_event')
   })
+  it('estorno CANCELLED no histórico, com pagamento RECEIVED, não suspende contrato', () => {
+    const payment = pay({
+      status: 'RECEIVED', dueDate: '2026-10-24', value: 49.9,
+      refunds: [{ status: 'CANCELLED', value: 49.9 }],
+    })
+    const result = reconcileSubscription({
+      ...base, local: local({ status: 'active', last_paid_due_date: '2026-10-24' }),
+      provider: { status: 'ACTIVE' }, payments: [payment],
+    })
+    expect(result.plans).toHaveLength(1)
+    expect(result.plans[0]?.rpc).toBe('record_asaas_billing_event')
+    expect(result.plans[0]?.args.p_event_type).toBe('PAYMENT_RECEIVED')
+    expect(result.plans.every((plan) => plan.rpc !== 'record_asaas_billing_reversal')).toBe(true)
+    expect(result.divergences.map((item) => item.type)).not.toContain('overdue_not_blocked')
+  })
+  it('estorno pendente não bloqueia nem cria evento de estorno prematuro', () => {
+    const r = reconcileSubscription({ ...base,
+      local: local({ status: 'active', last_paid_due_date: '2026-10-20' }),
+      provider: { status: 'ACTIVE' },
+      payments: [pay({ status: 'REFUND_IN_PROGRESS', dueDate: '2026-10-20' })],
+    })
+    expect(r.divergences.map((d) => d.type)).toContain('refund_pending_at_provider')
+    expect(r.plans).toHaveLength(0)
+    expect(verifiedEventFor(pay({ status: 'REFUND_IN_PROGRESS' }))).toBeNull()
+  })
+  it('estorno parcial requer revisão e não equivale a estorno integral', () => {
+    const r = reconcileSubscription({ ...base,
+      local: local(), provider: { status: 'ACTIVE' },
+      payments: [pay({ status: 'PARTIALLY_REFUNDED', dueDate: '2026-10-20' })],
+    })
+    expect(r.divergences.map((d) => d.type)).toContain('partial_refund_requires_review')
+    expect(r.plans).toHaveLength(0)
+  })
+  it('assinatura EXPIRED nao cancela indevidamente sem prova do provedor', () => {
+    const result = reconcileSubscription({ ...base, local: local(),
+      provider: { status: 'EXPIRED' },
+      payments: [pay({ status: 'RECEIVED', dueDate: '2026-10-20' })],
+    })
+    expect(result.plans).toHaveLength(0)
+    expect(result.divergences).toEqual([
+      expect.objectContaining({ type: 'subscription_unexpected_status', detail: 'EXPIRED' }),
+    ])
+  })
   it('detecta cobrança ausente e assinatura inexistente no provedor', () => {
     const missing = reconcileSubscription({ ...base, local: local(), provider: { status: 'ACTIVE' },
       payments: [pay({ status: 'RECEIVED', dueDate: '2026-06-01' })] })
@@ -45,6 +88,19 @@ describe('reconciliação Asaas · regras puras', () => {
     const r = reconcileSubscription({ ...base, local: local(), provider: { deleted: true }, payments: [] })
     expect(r.plans[0]?.args.p_event_type).toBe('SUBSCRIPTION_DELETED')
     expect(reconcileSubscription({ ...base, local: local({ status: 'canceled' }), provider: { deleted: true }, payments: [] }).plans).toHaveLength(0)
+  })
+  it('não marca fatura antiga vencida como nova divergência depois de mensalidade recente paga', () => {
+    const result = reconcileSubscription({ ...base,
+      local: local({ status: 'active', last_paid_due_date: '2026-10-20' }),
+      provider: { status: 'ACTIVE' },
+      payments: [
+        pay({ id: 'pay_antigo', status: 'OVERDUE', dueDate: '2026-09-20' }),
+        pay({ id: 'pay_novo', status: 'RECEIVED', dueDate: '2026-10-20' }),
+      ],
+    })
+    expect(result.divergences.map((d) => d.type)).not.toContain('overdue_not_blocked')
+    expect(result.plans.find((p) => p.args.p_payment_id === 'pay_antigo')?.args.p_event_id)
+      .toBe('recon_pay_antigo_PAYMENT_OVERDUE')
   })
   it('aplica em ordem cronológica de vencimento', () => {
     const r = reconcileSubscription({ ...base, local: local(), provider: { status: 'ACTIVE' }, payments: [

@@ -8,7 +8,12 @@ Sistema web de gestão para barbearias e salões: agendamento interno, página p
 - **Reserva pública:** catálogo e escolha de horários; proteção contra abuso com Cloudflare Turnstile e rate limiting na Edge Function.
 - **Financeiro:** receitas, despesas, estornos, pagamentos parciais, valores a receber e fechamento do dia.
 - **Comissões:** regra por profissional, captura ao concluir atendimento, cálculo sobre valores efetivamente recebidos e histórico de repasses. **Registrar repasse não transfere dinheiro nem lança despesa automaticamente.**
-- **Relatórios:** faturamento por recebimentos, saldo financeiro, serviços concluídos, ticket médio e rankings por profissional e por serviço, com filtros de período.\n- **Asaas (homologação):** backend para criação autorizada de assinaturas Pix/boleto e webhooks idempotentes; depende de configurar credenciais e implantar as Edge Functions. UI de contratação desativada por padrão (`VITE_ASAAS_BILLING_ENABLED`). Consulte `docs/asaas-integration.md`.\n- **Planos e contratos:** central administrativa para cadastrar preços e atribuir situação contratual e página do proprietário para consultar a assinatura. Esta primeira versão **não cobra, não suspende o serviço automaticamente e não integra gateway de pagamento**.\n- **Configurações do estabelecimento:** edição dos dados da empresa e compartilhamento do link público de agendamento, exclusiva para proprietário.\n- **Equipe e acessos:** proprietário gera convites seguros por link válido por 7 dias para e-mails confirmados, controla acesso ativo/inativo e consulta histórico de convites. O link deve ser enviado pelo proprietário: o sistema ainda não dispara e-mails automaticamente.\n- **Multiempresa:** vínculos e permissões por estabelecimento, protegidos por políticas RLS no Supabase.
+- **Relatórios:** faturamento por recebimentos, saldo financeiro, serviços concluídos, ticket médio e rankings por profissional e por serviço, com filtros de período.
+- **Asaas (homologação):** backend para criação autorizada de assinaturas Pix/boleto e webhooks idempotentes; depende de configurar credenciais e implantar as Edge Functions. UI de contratação desativada por padrão (`VITE_ASAAS_BILLING_ENABLED`). Consulte `docs/asaas-integration.md`.
+- **Planos e contratos:** central administrativa para cadastrar preços e atribuir situação contratual e página do proprietário para consultar a assinatura. A integração de cobranças recorrentes Asaas está **em homologação**: pagamento, atraso e cancelamento passaram em testes locais, mas **o estorno integral concluído ainda não foi comprovado no Sandbox**. Não habilitar cobranças reais nem publicar essas alterações sem revisão.
+- **Configurações do estabelecimento:** edição dos dados da empresa e compartilhamento do link público de agendamento, exclusiva para proprietário.
+- **Equipe e acessos:** proprietário gera convites seguros por link válido por 7 dias para e-mails confirmados, controla acesso ativo/inativo e consulta histórico de convites. O link deve ser enviado pelo proprietário: o sistema ainda não dispara e-mails automaticamente.
+- **Multiempresa:** vínculos e permissões por estabelecimento, protegidos por políticas RLS no Supabase.
 - **Painel da plataforma:** listagem de estabelecimentos para administradores.
 
 ## Tecnologias
@@ -27,6 +32,16 @@ npm run build
 ```
 
 A suíte SQL usa um banco PostgreSQL **descartável**, criado pelo script `supabase/tests/run.sh`, e não deve apontar para produção.
+
+**No Windows (PowerShell + Docker Desktop):**
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-db-windows.ps1
+```
+
+O comando inicia um container PostgreSQL 17 temporário com o código montado apenas para leitura, executa as migrações e testes, registra um log no diretório TEMP e remove somente seu próprio container. Não lê chaves do Asaas, não acessa Supabase remoto e não publica portas. Os arquivos `.sh` são mantidos com final de linha **LF** por `.gitattributes` (dispensa a conversão manual que era necessária em alguns checkouts do Windows).
+
+Em 24/10/2026, os testes SQL enviados pelo operador registraram **354 asserções aprovadas e zero falhas**. A mesma suíte também é executada no GitHub Actions, juntamente com o build, os testes de código e os testes no navegador.
 
 ## Cuidados de produção
 

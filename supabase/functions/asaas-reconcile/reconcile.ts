@@ -42,6 +42,12 @@ export function reconcileSubscription(opts: {
   const divergences: Divergence[] = []
   const plans: Plan[] = []
   if (!provider) return { plans, divergences: [{ type: 'subscription_missing_at_provider', subscription_id: subId }] }
+  // EXPIRED and unknown provider states are not proof of deletion. Do not
+  // invent a cancellation or reactivation; surface them for manual review.
+  if (provider.deleted !== true && provider.status !== 'ACTIVE' && provider.status !== 'INACTIVE') {
+    return { plans, divergences: [{ type: 'subscription_unexpected_status', subscription_id: subId,
+      detail: String(provider.status ?? 'UNKNOWN') }] }
+  }
   if (provider.deleted === true || provider.status === 'INACTIVE') {
     if (local.status !== 'canceled') {
       divergences.push({ type: 'subscription_inactive_at_provider', subscription_id: subId, detail: `local=${local.status}` })
@@ -59,7 +65,16 @@ export function reconcileSubscription(opts: {
     divergences.push({ type: 'missing_recent_charge', subscription_id: subId })
   for (const p of sorted) {
     let fresh = false
-    if (p.status === 'OVERDUE' && !p.deleted && local.status === 'active') {
+    // Not a completed refund: do NOT revoke a paid plan, but record an
+    // actionable audit divergence until Asaas confirms the final outcome.
+    if (p.status === 'REFUND_IN_PROGRESS' || p.status === 'REFUND_REQUESTED') {
+      divergences.push({ type: 'refund_pending_at_provider', subscription_id: subId, payment_id: p.id })
+    } else if (p.status === 'PARTIALLY_REFUNDED') {
+      divergences.push({ type: 'partial_refund_requires_review', subscription_id: subId, payment_id: p.id })
+    }
+    // A previous overdue invoice must not become a new divergence after a newer invoice was paid.
+    if (p.status === 'OVERDUE' && !p.deleted && local.status === 'active'
+      && (!local.last_paid_due_date || p.dueDate! > local.last_paid_due_date)) {
       divergences.push({ type: 'overdue_not_blocked', subscription_id: subId, payment_id: p.id }); fresh = true
     }
     if (isPaid(p) && blockedLocally && localDue && p.dueDate! >= localDue) {

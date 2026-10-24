@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0'
+import { brazilBillingDate } from '../_shared/billing-date.ts'
 
 const url = Deno.env.get('SUPABASE_URL') ?? ''
 const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -89,18 +90,20 @@ Deno.serve(async req => {
       email:auth.user.email ?? undefined, externalReference:estId,
     })
     if (typeof customer.id !== 'string' || !customer.id.startsWith('cus_')) throw new Error('unexpected_customer')
-    const today = new Date()
-    const nextDueDate = today.toISOString().slice(0,10)
+    const nextDueDate = brazilBillingDate(new Date())
     const subscription = await requestAsaas('/subscriptions','POST',{
       customer:customer.id, billingType:payload.billingType,
       value:plan.monthly_price_cents / 100, nextDueDate, cycle:'MONTHLY',
       description:`Orbit Agenda — ${plan.name}`.slice(0,500), externalReference:estId,
     })
     if (typeof subscription.id !== 'string' || !subscription.id.startsWith('sub_')) throw new Error('unexpected_subscription')
-    const { error: saveError } = await admin.from('establishment_subscriptions')
+    const { data: saved, error: saveError } = await admin.from('establishment_subscriptions')
       .update({asaas_customer_id:customer.id,asaas_subscription_id:subscription.id,asaas_synced_at:new Date().toISOString()})
       .eq('establishment_id',estId).not('asaas_provisioning_started_at','is',null)
-    if (saveError) throw new Error('failed_to_persist_subscription')
+      .is('asaas_subscription_id',null).select('establishment_id').maybeSingle()
+    // Updating zero rows is not a success. Preserve the provisioning reservation
+    // for manual recovery instead of creating an orphaned recurring charge.
+    if (saveError || !saved) throw new Error('failed_to_persist_subscription')
     return reply(200,'Assinatura criada no Asaas. Aguarde a confirmação de pagamento.',{
       subscriptionId:subscription.id,environment,
     })
