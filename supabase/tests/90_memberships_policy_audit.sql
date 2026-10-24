@@ -13,12 +13,12 @@ begin
     into v_update_count, v_update_text
     from pg_policies
    where schemaname='public' and tablename='memberships'
-     and cmd='UPDATE' and 'authenticated'=any(roles);
+     and cmd='UPDATE' and permissive='PERMISSIVE' and 'authenticated'=any(roles);
   select count(*), string_agg(coalesce(qual,''), ' ')
     into v_delete_count, v_delete_text
     from pg_policies
    where schemaname='public' and tablename='memberships'
-     and cmd='DELETE' and 'authenticated'=any(roles);
+     and cmd='DELETE' and permissive='PERMISSIVE' and 'authenticated'=any(roles);
   if v_update_count <> 1 or v_delete_count <> 1 then
     raise exception 'FAIL permissive policy count update %, delete %',v_update_count,v_delete_count;
   end if;
