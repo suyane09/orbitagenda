@@ -117,3 +117,17 @@ Executado sem acesso ao Asaas Sandbox nem ao Docker do operador:
 - **Limite de escopo:** estes testes simulam comportamentos e exercitam SQL e navegador, mas **não substituem** o teste real de estorno integral concluído com `PAYMENT_REFUNDED` na conta Asaas Sandbox. Os testes negativos já comprovaram que reembolso `CANCELLED` não deve suspender o serviço.
 
 Antes de qualquer release, a integração requer revisão de deploy, segredos, configuração de webhooks, agendamento real da conciliação e evidência de estorno integral `DONE`, sem afetar a produção atual. As PRs #15, #16 e #17 permanecem separadas e dependentes.
+
+## 8. Duas tentativas de estorno efetivamente CANCELLED (24/10/2026)
+
+Nova leitura da fixture original confirmou: pagamento `pay_41pnfrerqc0b4qv5`, assinatura `sub_86pwavjc9oe9rqce`, `payment.status=RECEIVED`, `refunds[0].status=CANCELLED`, `refunds[0].value=49.9`. A fixture de simulação `pay_0jx1hsuu620kubkw` já tinha retornado o mesmo estado. **Ambos são cancelamentos definitivos das tentativas, não autorizações pendentes nem estornos concluídos.** Não enviar novos POSTs de estorno nesses IDs.
+
+O painel em **Integrações > Segurança** mostra a validação de saque por webhook desabilitada; portanto não há evidência de que essa validação opcional seja a causa. Os logs de requisições exibidos não revelaram erro de estorno. A API normalmente retorna, para cada estorno, status, valor, criação e descrição, mas **não há campo de motivo de cancelamento garantido para refund**. Evitar atribuir a causa a saldo, token ou webhook sem evidência. Documentação: https://docs.asaas.com/docs/estornos e https://docs.asaas.com/reference/estornar-cobranca .
+
+Para a última tentativa de diagnóstico sem qualquer alteração de estado, consultar ambas as cobranças de teste por `GET`:
+
+```powershell
+node .\scripts\asaas-sandbox-e2e.mjs --diagnose-refunds
+```
+
+O modo imprime apenas status, valor, data e possíveis campos técnicos, sem dados de clientes nem tokens e sem `POST` de cobrança/estorno, sem conciliar e sem alterar banco. Se o retorno não trouxer motivo, a causa depende de informações internas do Asaas/suporte. Os testes de regressão em CI já validam o tratamento de estornos cancelados, parciais e confirmados de forma simulada.
