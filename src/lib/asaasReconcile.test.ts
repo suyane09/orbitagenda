@@ -66,6 +66,16 @@ describe('reconciliação Asaas · regras puras', () => {
     expect(r.divergences.map((d) => d.type)).toContain('partial_refund_requires_review')
     expect(r.plans).toHaveLength(0)
   })
+  it('assinatura EXPIRED nao cancela indevidamente sem prova do provedor', () => {
+    const result = reconcileSubscription({ ...base, local: local(),
+      provider: { status: 'EXPIRED' },
+      payments: [pay({ status: 'RECEIVED', dueDate: '2026-10-20' })],
+    })
+    expect(result.plans).toHaveLength(0)
+    expect(result.divergences).toEqual([
+      expect.objectContaining({ type: 'subscription_unexpected_status', detail: 'EXPIRED' }),
+    ])
+  })
   it('detecta cobrança ausente e assinatura inexistente no provedor', () => {
     const missing = reconcileSubscription({ ...base, local: local(), provider: { status: 'ACTIVE' },
       payments: [pay({ status: 'RECEIVED', dueDate: '2026-06-01' })] })
