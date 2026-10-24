@@ -6,7 +6,7 @@ import { formatBRL } from '@/lib/money'
 import { AsaasBillingPanel } from './AsaasBillingPanel'
 
 type Subscription = {
-  status: string; started_at: string; current_period_end: string | null;
+  status: string; started_at: string; current_period_end: string | null; payment_due_at: string | null;
   plan_id: string; notes: string; asaas_subscription_id: string | null; asaas_provisioning_started_at: string | null
 }
 type Plan = { id: string; name: string; monthly_price_cents: number | null }
@@ -29,7 +29,7 @@ export default function SubscriptionPage() {
     setLoading(true);setError('')
     try {
       const s=await supabase.from('establishment_subscriptions')
-        .select('status,started_at,current_period_end,plan_id,notes,asaas_subscription_id,asaas_provisioning_started_at')
+        .select('status,started_at,current_period_end,payment_due_at,plan_id,notes,asaas_subscription_id,asaas_provisioning_started_at')
         .eq('establishment_id',id).maybeSingle()
       if(s.error)throw s.error
       setSub(s.data as Subscription|null)
@@ -81,9 +81,9 @@ export default function SubscriptionPage() {
             <p className="mt-2 text-xs text-slate">Valor definido pelo plano contratado.</p>
           </div>
           <div className="p-6 sm:p-8">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate">Fim do período registrado</p>
-            <p className="mt-3 font-display text-2xl font-semibold">{sub.current_period_end ? new Date(sub.current_period_end).toLocaleDateString('pt-BR') : 'Ainda não definido'}</p>
-            <p className="mt-2 text-xs text-slate">A confirmação do pagamento pode levar alguns instantes.</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate">Próximo vencimento pendente</p>
+            <p className="mt-3 font-display text-2xl font-semibold">{sub.payment_due_at ? new Date(sub.payment_due_at).toLocaleDateString('pt-BR', {timeZone:'America/Sao_Paulo'}) : 'Sem cobrança em atraso'}</p>
+            <p className="mt-2 text-xs text-slate">Se houver atraso, o acesso às operações é suspenso após cinco dias. A confirmação do pagamento pode levar alguns instantes.</p>
           </div>
         </div>
         {sub.notes&&!sub.asaas_subscription_id&&<p className="mx-6 mb-6 rounded-xl bg-paper px-4 py-3 text-sm leading-relaxed text-slate sm:mx-8">{sub.notes}</p>}
