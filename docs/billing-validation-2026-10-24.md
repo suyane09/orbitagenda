@@ -58,3 +58,13 @@ Pós-testes: **0** estabelecimentos, eventos e assinaturas fictícias remanescen
 - **Publicação comprovada:** commit GitHub `8e6b275c41cceba8ea0044e311c2facca75683b4`; Edge Function `asaas-webhook` versão **14**, status `ACTIVE`, com ambas as alterações confirmadas por leitura da versão implantada.
 - **Integridade pós-publicação:** única assinatura existente permaneceu `active`, ambiente `sandbox`, `payment_due_at=null`, `last_paid_due_date=null`, `private.billing_allows_write(...)=true`. Nenhuma cobrança foi gerada nem alterada.
 - **Limite do teste:** a implantação e o código publicado foram verificados, mas não houve disparo de evento real Asaas Sandbox nem teste HTTP completo nesta rodada. O evento de estorno, o cancelamento da assinatura e a reconciliação periódica continuam pendentes.
+
+## Revisão adicional — 24/10/2026, correção de regressão no webhook
+
+- **Regressão real encontrada no código da versão 14:** onze sequências literais `\\n` haviam sido inseridas onde deveriam existir quebras de linha no TypeScript. Como algumas estavam em comentários `//`, trechos que deveriam filtrar eventos e declarar `verifiedEvent` ficavam comentados. Isso podia levar a erro em tempo de execução na etapa de gravação do webhook. A publicação anterior, sozinha, não comprovava execução correta.
+- **Correção aplicada:** substituição das onze sequências por quebras de linha reais, preservando o restante da implementação; commit GitHub `1723f843170831efa78d2f3e7bc76132343a1b5a`.
+- **Implantação comprovada:** função `asaas-webhook` versão **15**, status `ACTIVE`; leitura posterior do código implantado confirmou ausência dessas sequências literais, presença do filtro de eventos e da variável `verifiedEvent`.
+- **Checagens de banco somente leitura:** 45 políticas restritivas de escrita continuam presentes; a RPC `record_asaas_billing_event` não pode ser executada por `anon` nem `authenticated`, mas pode por `service_role`. Para vencimento em 20/10, o cálculo retorna **acesso em 25/10** e **bloqueio em 26/10**.
+- **Integridade:** a única assinatura consultada permanece `active`, `payment_due_at=null`, ambiente `sandbox` e `billing_allows_write=true`; a tabela de eventos contém uma linha. Nenhuma cobrança ou assinatura foi modificada nesta rodada.
+- **Limite importante:** a leitura da função publicada e as verificações SQL **não** equivalem a uma requisição HTTP de webhook Asaas Sandbox. Ainda faltam eventos reais de atraso, pagamento, duplicação e fora de ordem, e testes de navegador com Turnstile.
+- **Advisor Supabase:** permanecem avisos sobre dez RPCs `SECURITY DEFINER` executáveis por autenticados, além da proteção contra senhas vazadas desativada. Não foram alteradas sem revisão das autorizações esperadas.
