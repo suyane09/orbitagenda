@@ -32,7 +32,7 @@ assert.match(env.VITE_SUPABASE_URL || '', /^http:\/\/(?:127\.0\.0\.1|localhost):
 if (env.SUPABASE_URL) {
   assert.match(env.SUPABASE_URL, /^http:\/\/(?:127\.0\.0\.1|localhost):54321\/?$/, 'SUPABASE_URL aponta fora do ambiente local')
 }
-const customerId = option('--customer', 'cus_000009677194')
+const customerId = option('--customer', null) || sql("SELECT asaas_customer_id FROM public.establishment_subscriptions WHERE asaas_environment='sandbox' AND asaas_customer_id IS NOT NULL AND asaas_subscription_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1")
 assert.match(customerId, /^cus_[A-Za-z0-9]+$/, 'Customer ID Sandbox invalido')
 const BASE = 'https://api-sandbox.asaas.com/v3'
 const LOCAL = 'http://127.0.0.1:54321'
