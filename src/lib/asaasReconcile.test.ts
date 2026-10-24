@@ -33,6 +33,21 @@ describe('reconciliação Asaas · regras puras', () => {
     expect(r.divergences.map((d) => d.type)).toContain('local_blocked_provider_paid')
     expect(r.plans[0]?.rpc).toBe('record_asaas_billing_event')
   })
+  it('estorno CANCELLED no histórico, com pagamento RECEIVED, não suspende contrato', () => {
+    const payment = pay({
+      status: 'RECEIVED', dueDate: '2026-10-24', value: 49.9,
+      refunds: [{ status: 'CANCELLED', value: 49.9 }],
+    })
+    const result = reconcileSubscription({
+      ...base, local: local({ status: 'active', last_paid_due_date: '2026-10-24' }),
+      provider: { status: 'ACTIVE' }, payments: [payment],
+    })
+    expect(result.plans).toHaveLength(1)
+    expect(result.plans[0]?.rpc).toBe('record_asaas_billing_event')
+    expect(result.plans[0]?.args.p_event_type).toBe('PAYMENT_RECEIVED')
+    expect(result.plans.every((plan) => plan.rpc !== 'record_asaas_billing_reversal')).toBe(true)
+    expect(result.divergences.map((item) => item.type)).not.toContain('overdue_not_blocked')
+  })
   it('estorno pendente não bloqueia nem cria evento de estorno prematuro', () => {
     const r = reconcileSubscription({ ...base,
       local: local({ status: 'active', last_paid_due_date: '2026-10-20' }),
