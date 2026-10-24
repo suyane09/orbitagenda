@@ -97,12 +97,12 @@ begin
           payment_due_at=case when payment_due_at is null or payment_due_at<=v_due_at
                               then null else payment_due_at end,
           asaas_synced_at=now(),updated_at=now()
-      where establishment_id=v_est and status<>'canceled';
+      where establishment_id=v_est and status in ('trialing','active','past_due');
   elsif p_event_type='PAYMENT_OVERDUE' and p_payment_status='OVERDUE' then
     update public.establishment_subscriptions
       set status='past_due',payment_due_at=v_due_at,
           asaas_synced_at=now(),updated_at=now()
-      where establishment_id=v_est and status<>'canceled'
+      where establishment_id=v_est and status in ('trialing','active','past_due')
         and (last_paid_due_date is null or last_paid_due_date<p_due_date)
         and (payment_due_at is null or payment_due_at<=v_due_at);
   end if;
