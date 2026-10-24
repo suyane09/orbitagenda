@@ -4,6 +4,7 @@
 set client_min_messages = notice;
 
 create schema tests;
+grant usage on schema tests to authenticated;
 create function tests.ok(p_condition boolean, p_label text) returns void
 language plpgsql as $$
 begin
@@ -11,7 +12,8 @@ begin
     raise exception 'FAIL  %', p_label;
   end if;
   raise notice 'PASS  %', p_label;
-end $$;
+end $;
+grant execute on function tests.ok(boolean,text) to authenticated;
 
 insert into auth.users (id, email) values
  ('ac000000-0000-0000-0000-000000000001', 'pilot-owner@orbit.invalid'),
