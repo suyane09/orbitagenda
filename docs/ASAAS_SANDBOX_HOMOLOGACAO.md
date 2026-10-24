@@ -104,3 +104,16 @@ Foi criado diagnóstico negativo em `--check-refund-sim`: ele reconsulta o estad
 A suíte automatizada de SQL já valida processamento do evento `PAYMENT_REFUNDED` e as alterações `active -> past_due`, tolerância de cinco dias e bloqueio. Isso é teste de regra, **não substitui** a evidência de um estorno financeiro concluído no Sandbox.
 
 A solicitação anterior em `pay_41pnfrerqc0b4qv5` segue um fluxo separado de **`AWAITING_CRITICAL_ACTION_AUTHORIZATION`**, sem confirmação de conclusão. Ela não deve ser repetida.
+
+## 7. Auditoria remota de código e segurança (24/10/2026)
+
+Executado sem acesso ao Asaas Sandbox nem ao Docker do operador:
+
+- **Gateway Supabase:** `[functions.asaas-webhook]` e `[functions.asaas-reconcile]` exigem `verify_jwt=false`, pois usam respectivamente os próprios cabeçalhos secretos `asaas-access-token` e `x-reconcile-token`. A validação desses segredos acontece na Edge Function. `[functions.asaas-subscribe]` mantém `verify_jwt=true`, além de validar a sessão e propriedade da empresa.
+- **Produção protegida:** as três funções financeiras exigem `ASAAS_PRODUCTION_CONFIRMED=true` quando configuradas para `ASAAS_ENVIRONMENT=production`. Nenhuma configuração ou banco de produção foi alterado nesta homologação.
+- **Dia de vencimento:** a data da assinatura e o dia da conciliação utilizam o calendário de `America/Sao_Paulo` pelo `Intl.DateTimeFormat`, evitando a data errada perto da meia-noite UTC e quando havia horário de verão.
+- **Consulta financeira:** listagens do Asaas que retornarem 404, dados malformados, cobrança atribuída a outra assinatura, quantidade além do limite por execução ou identificador de assinatura divergente causam falha auditável sem registrar sincronização concluída. `EXPIRED`/status de assinatura desconhecido gera divergência e exige revisão, **não** cancela automaticamente.
+- **Validação GitHub:** testes Vitest (segurança, regras financeiras), PostgreSQL em banco descartável, build TypeScript/Vite e smoke tests no Chromium. Configuração de gateway e funções compartilhadas também ativam CI.
+- **Limite de escopo:** estes testes simulam comportamentos e exercitam SQL e navegador, mas **não substituem** o teste real de estorno integral concluído com `PAYMENT_REFUNDED` na conta Asaas Sandbox. Os testes negativos já comprovaram que reembolso `CANCELLED` não deve suspender o serviço.
+
+Antes de qualquer release, a integração requer revisão de deploy, segredos, configuração de webhooks, agendamento real da conciliação e evidência de estorno integral `DONE`, sem afetar a produção atual. As PRs #15, #16 e #17 permanecem separadas e dependentes.
