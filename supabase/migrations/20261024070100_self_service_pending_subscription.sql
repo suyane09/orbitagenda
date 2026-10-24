@@ -2,6 +2,12 @@
 -- a NOVOS estabelecimentos, sem liberar escrita nem gerar cobranças.
 -- A assinatura nasce "past_due" sem vencimento, portanto billing_allows_write=false.
 -- Não modifica assinaturas nem cobranças de estabelecimentos existentes.
+-- O banco descartável de CI não possui os registros administrativos de produção.
+-- Cria o plano apenas se ausente; nunca sobrescreve preço/contrato existente.
+INSERT INTO public.subscription_plans(code,name,monthly_price_cents,is_public)
+VALUES ('inicial_4990','Inicial',4990,true)
+ON CONFLICT (code) DO NOTHING;
+
 DO $migration$
 DECLARE
   v_def text;
