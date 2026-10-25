@@ -98,20 +98,26 @@ try {
   if ((Q 'SELECT count(*) FROM auth.users;') -ne '0') {
     StopSafe 'Destination Auth is not empty'
   }
+  # Supabase CLI initialized its own database roles with db start. Restoring remote
+  # role attributes from roles.sql would require elevated privileges and could
+  # overwrite local authentication configuration; verify required local roles instead.
+  $rolesPresent = (Q "SELECT count(*) FROM pg_roles WHERE rolname IN ('postgres','anon','authenticated','service_role','supabase_admin');")
+  if ($rolesPresent -ne '5') { StopSafe 'Expected local Supabase roles missing; no import attempted' }
   $targetConfirmed = $true
   Write-Host 'ISOLATED_DESTINATION_OK: fourth local container / port 54622 / PostgreSQL 17'
+  Write-Host 'LOCAL_ROLES_OK: using seeded Supabase roles (roles.sql checksum verified, not executed)'
 
-  foreach ($filename in $names) {
+  foreach ($filename in @('schema.sql','data.sql')) {
     $remote = '/tmp/orbitagenda-import-' + $filename
     [void](Docker -Arguments @('cp',(Join-Path $BackupDir $filename),($target + ':' + $remote)))
     $remoteFiles += $remote
   }
   Write-Host 'RESTORING_IN_ONE_TRANSACTION (not connected to production)'
+  # Do not set session_replication_role: it requires restricted rights in
+  # Supabase and would bypass database triggers during data import.
   [void](Docker -Arguments @('exec',$target,'psql','-X','-q','-U','postgres','-d','postgres',
     '-v','ON_ERROR_STOP=1','--single-transaction',
-    '-f',$remoteFiles[0],'-f',$remoteFiles[1],
-    '-c','SET session_replication_role = replica',
-    '-f',$remoteFiles[2]))
+    '-f',$remoteFiles[0],'-f',$remoteFiles[1]))
   Write-Host 'SQL_RESTORE_COMMITTED: transaction succeeded'
 
   $tables = [int](Q "SELECT count(*) FROM pg_tables WHERE schemaname='public';")
@@ -124,7 +130,7 @@ try {
       $authUsers -lt 1 -or $businesses -lt 1 -or $subscriptions -lt 1) {
     StopSafe 'Restore committed, structural/essential-data checks failed; do not rerun into this container'
   }
-  # Verify foreign-key row contents, since restoring with session_replication_role=replica disables FK triggers.
+  # Independently verify foreign-key row contents after import.
   $fkAudit = @'
 DO $check$
 DECLARE x record; eq text; present text; missing bigint;
@@ -154,6 +160,8 @@ END $check$;
     ('verified_at=' + (Get-Date).ToString('o')),
     ('local_container=' + $target),
     'local_port=54622',
+    'local_supabase_roles=seeded_and_verified',
+    'roles_sql=checksum_verified_not_executed',
     ('database_tables=' + $tables),
     ('tables_without_rls=' + $unprotected),
     ('unvalidated_fks=' + $badKeys),
