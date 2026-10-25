@@ -26,7 +26,7 @@ function Ensure-LocalSecrets {
     $apiKey = New-Secret
     [System.IO.File]::WriteAllText($envFile,
       "POSTGRES_PASSWORD=$databasePassword`nAUTHENTICATION_API_KEY=$apiKey`n",
-      (New-Object System.Text.UTF8Encoding($false)))
+      [System.Text.UTF8Encoding]::new($false))
     Write-Host 'Credenciais locais geradas. Arquivo .env ignorado pelo Git.' -ForegroundColor Green
   }
 }
@@ -121,6 +121,8 @@ function Extract-Qr($data) {
 function Show-Qr($initial) {
   $state = Get-ConnectionState
   if ($state -eq 'open') {
+    $oldQr = Join-Path $env:TEMP 'orbitagenda-whatsapp-qr-local.html'
+    if (Test-Path -LiteralPath $oldQr) { Remove-Item -LiteralPath $oldQr -Force -ErrorAction SilentlyContinue }
     Write-Host 'WhatsApp conectado! Nao e necessario novo QR Code.' -ForegroundColor Green
     return
   }
@@ -153,7 +155,7 @@ function Show-Qr($initial) {
 <main><h1>Conectar WhatsApp</h1><p>No celular, abra WhatsApp &gt; Dispositivos conectados &gt; Conectar dispositivo</p>
 <img src="$src" alt="QR Code para conectar WhatsApp"><p><small>Exclusivo deste computador. Nao compartilhe este QR Code. Caso expire, rode novamente -Acao qr.</small></p></main></html>
 "@
-  [System.IO.File]::WriteAllText($qrFile, $html, (New-Object System.Text.UTF8Encoding($false)))
+  [System.IO.File]::WriteAllText($qrFile, $html, [System.Text.UTF8Encoding]::new($false))
   Start-Process -FilePath $qrFile
   Write-Host 'QR Code aberto no navegador. Leia com o seu WhatsApp.' -ForegroundColor Green
   Write-Host 'Depois de vincular, rode: .\testar.ps1 -Acao status'
@@ -175,7 +177,11 @@ switch ($Acao) {
     $state = Get-ConnectionState
     if (-not $state) { Write-Host 'Instancia ainda nao foi criada.'; break }
     Write-Host "Situacao do WhatsApp: $state"
-    if ($state -eq 'open') { Write-Host 'Pronto para enviar um teste (apenas com autorizacao explicita).' -ForegroundColor Green }
+    if ($state -eq 'open') {
+      $oldQr = Join-Path $env:TEMP 'orbitagenda-whatsapp-qr-local.html'
+      if (Test-Path -LiteralPath $oldQr) { Remove-Item -LiteralPath $oldQr -Force -ErrorAction SilentlyContinue }
+      Write-Host 'Pronto para enviar um teste (apenas com autorizacao explicita).' -ForegroundColor Green
+    }
   }
   'enviar' {
     if ($Destino -notmatch '^55[1-9][0-9]{9,10}$') {
