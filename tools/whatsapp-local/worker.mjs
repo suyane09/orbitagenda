@@ -2,7 +2,7 @@
 // This process runs on the same computer as Docker, polls Supabase over HTTPS.
 // No incoming ports, tunnels, Edge secrets, service_role keys or public APIs.
 // One worker pairing token grants access to exactly one establishment.
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -10,7 +10,7 @@ import { setTimeout as pause } from 'node:timers/promises'
 
 const home = dirname(fileURLToPath(import.meta.url))
 const envPath = join(home, '.env')
-const tokenPath = join(home, '.worker.json')
+const profilesDir = join(home, '.workers')
 const evoBase = 'http://127.0.0.1:8088'
 const origin = 'http://localhost:8088'
 const args = process.argv.slice(2)
@@ -27,10 +27,12 @@ async function readEnv() {
   }
   return obj
 }
-async function readPairing() {
-  if (!existsSync(tokenPath)) throw Error('Conexao nao vinculada. Execute node worker.mjs pair CODIGO primeiro.')
-  return JSON.parse(await readFile(tokenPath,'utf8'))
+async function readPairings() {
+  if (!existsSync(profilesDir)) return []
+  const files=(await readdir(profilesDir)).filter(x=>/^oa_[a-f0-9]{32}\.json$/.test(x))
+  return Promise.all(files.map(async x=>JSON.parse(await readFile(join(profilesDir,x),'utf8'))))
 }
+
 function validateEnv(e) {
   if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(e.SUPABASE_URL || ''))
     throw Error('SUPABASE_URL deve ser https://SEU-PROJETO.supabase.co (configure no .env local).')
@@ -137,21 +139,25 @@ async function main() {
   if (args[0]==='pair') {
     const code = args[1]
     if (!/^[a-f0-9]{64}$/.test(code || '')) throw Error('Copie o codigo de 64 caracteres exibido no painel WhatsApp da barbearia.')
-    if (existsSync(tokenPath)) throw Error('Este computador ja esta vinculado. Revogue/reconfigure a conexao antes de parear outra.')
     const data=await rpc(e,'whatsapp_worker_pair',{p_code:code})
     if (!/^[a-f0-9]{64}$/.test(data?.token||'') || !/^oa_[a-f0-9]{32}$/.test(data?.instance_name||''))
       throw Error('Resposta de pareamento invalida.')
-    await writeFile(tokenPath,JSON.stringify(data),{mode:0o600,flag:'wx'})
+    await mkdir(profilesDir,{recursive:true,mode:0o700})
+    await writeFile(join(profilesDir,`${data.instance_name}.json`),JSON.stringify(data),{mode:0o600,flag:'w'})
     console.log('Barbearia vinculada a este worker. Execute: node worker.mjs run')
     return
   }
   if(args[0]!=='run') throw Error('Uso: node worker.mjs pair CODIGO | node worker.mjs run')
-  const pair=await readPairing()
   console.log('Worker outbound iniciado. Ctrl+C para parar. Docker deve permanecer ligado.')
   while (!quitting) {
-    try {await tick(e,pair)}
-    catch (err) {console.error('Worker:',err.message)}
-    if (!quitting) await pause(8000)
+    const pairings=await readPairings()
+    if(pairings.length===0) throw Error('Nenhuma empresa pareada: use node worker.mjs pair CODIGO.')
+    for (const pair of pairings) {
+      if(quitting)break
+      try { await tick(e,pair) }
+      catch(err){ console.error(`Worker ${pair.instance_name}:`,err.message) }
+    }
+    if(!quitting)await pause(8000)
   }
   console.log('Worker encerrado; Docker permanece ligado.')
 }
