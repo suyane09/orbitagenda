@@ -52,7 +52,19 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex h-full flex-col overflow-y-auto border-r border-white/5 bg-ink px-3 pb-3 pt-4 text-white">
       <div className="px-1.5"><Wordmark tone="dark" /></div>
 
-      {current && (
+      {isSuperadmin && (
+        <div className="mt-5 flex items-center gap-2.5 rounded-md border border-orbit-glow/20 bg-white/[0.04] p-2.5">
+          <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded bg-white/10">
+            <Icon name="shield" className="size-4 text-orbit-glow" />
+          </span>
+          <div className="min-w-0 flex-1 leading-tight">
+            <p className="truncate text-sm font-medium">OrbitAgenda</p>
+            <p className="mt-0.5 text-xs text-white/45">Administração da plataforma</p>
+          </div>
+        </div>
+      )}
+
+      {!isSuperadmin && current && (
         <div className="mt-5 flex items-center gap-2.5 rounded-md border border-white/10 bg-white/[0.03] p-2">
           <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded bg-white/10 text-xs font-semibold">{initials(current.establishment.name)}</span>
           <div className="min-w-0 flex-1 leading-tight">
@@ -71,7 +83,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       )}
 
       <nav aria-label="Principal" className="mt-6 flex-1">
-        {current && (
+        {!isSuperadmin && current && (
           <>
             <p className="px-2.5 pb-1.5 text-xs text-white/30">Operação</p>
             <div className="space-y-0.5">{operation.filter((e) => !['/app/financeiro', '/app/comissoes', '/app/relatorios'].includes(e.to) || current.role === 'owner').map((e) => <NavItem key={e.to} entry={e} onNavigate={onNavigate} />)}</div>
@@ -80,9 +92,12 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           </>
         )}
         {isSuperadmin && (
-          <div className="mt-5 space-y-0.5">
-            <p className="px-2.5 pb-1.5 text-xs text-white/30">Administração</p>
-            <NavItem entry={{ label: 'Plataforma', to: '/plataforma', icon: 'shield' }} onNavigate={onNavigate} />
+          <div className="space-y-0.5">
+            <p className="px-2.5 pb-1.5 text-xs text-white/30">Minha plataforma</p>
+            <NavItem entry={{ label: 'Visão geral', to: '/plataforma', icon: 'chart', end: true }} onNavigate={onNavigate} />
+            <p className="px-2.5 pt-4 text-xs leading-relaxed text-white/40">
+              Indicadores, estabelecimentos e assinaturas em um só lugar.
+            </p>
           </div>
         )}
         {!isSuperadmin && ownedCount < 3 && (
@@ -110,7 +125,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 export function AppShell() {
   const [open, setOpen] = useState(false)
   const { pathname } = useLocation()
-  const { current } = useAccount()
+  const { current, isSuperadmin } = useAccount()
   useEffect(() => setOpen(false), [pathname])
   useEffect(() => {
     if (!open) return
@@ -125,7 +140,12 @@ export function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex min-h-12 items-center justify-between gap-3 border-b border-hairline bg-surface pl-4 pr-2 pt-[env(safe-area-inset-top)] lg:hidden">
-          {current ? (
+          {isSuperadmin ? (
+            <span className="inline-flex min-w-0 items-center gap-2.5">
+              <Icon name="shield" className="size-5 text-ink" />
+              <span className="truncate font-display text-[0.95rem] font-semibold tracking-tight">Central da plataforma</span>
+            </span>
+          ) : current ? (
             <span className="inline-flex min-w-0 items-center gap-2.5">
               <OrbitMark size={24} />
               <span className="truncate font-display text-[0.95rem] font-semibold tracking-tight">{current.establishment.name}</span>
