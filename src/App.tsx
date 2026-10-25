@@ -1,11 +1,11 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { ErrorState, FullScreenLoader } from '@/components/ui/States'
 import { AuthProvider } from '@/features/auth/AuthProvider'
 import { PublicOnly, RequireAuth } from '@/features/auth/guards'
-import { RequireEstablishment, RequireSuperadmin } from '@/features/establishments/guards'
+import { PortalHome, RequireEstablishment, RequireSuperadmin } from '@/features/establishments/guards'
 import { getEnvError } from '@/lib/env'
 
 const LoginPage = lazy(() => import('@/features/auth/LoginPage'))
@@ -52,6 +52,7 @@ export default function App() {
               <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
 
               <Route element={<RequireAuth />}>
+                <Route path="/" element={<PortalHome />} />
                 <Route path="/criar-estabelecimento" element={<OnboardingPage />} />
                 <Route path="/aceitar-convite/:token" element={<AcceptInvitePage />} />
                 <Route element={<AppShell />}>
@@ -77,7 +78,6 @@ export default function App() {
                 </Route>
               </Route>
               <Route path="/agendar/:slug" element={<PublicBookingPage />} />
-              <Route path="/" element={<Navigate to="/app" replace />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

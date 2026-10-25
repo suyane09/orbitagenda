@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAccount } from './AccountProvider'
+import { mayUseMerchantPortal, portalHome } from './portalAccess'
 import { supabase } from '@/lib/supabase'
 
 type BillingGuardState = {
@@ -18,10 +19,11 @@ export function RequireEstablishment() {
   const { current, isSuperadmin } = useAccount()
   const location = useLocation()
   const establishmentId = current?.establishment.id
+  const mayOpen = mayUseMerchantPortal(isSuperadmin, current?.role)
   const [state, setState] = useState<BillingGuardState | null>(null)
 
   useEffect(() => {
-    if (!establishmentId || isSuperadmin) return
+    if (!establishmentId || !mayOpen) return
     let cancelled = false
     void supabase.rpc('is_establishment_billing_blocked', {
       p_establishment_id: establishmentId,
@@ -34,21 +36,19 @@ export function RequireEstablishment() {
       })
     })
     return () => { cancelled = true }
-  }, [establishmentId, isSuperadmin, location.pathname])
+  }, [establishmentId, mayOpen, location.pathname])
 
-  // Administração da plataforma e operação de um estabelecimento são áreas distintas.
-  // Uma pessoa que também seja proprietária de um estabelecimento usa somente
-  // a Central da Plataforma enquanto tiver o papel de superadministradora.
-  if (isSuperadmin) {
-    return <Navigate to="/plataforma" replace />
-  }
+  // Superadmin may work in a barbershop ONLY through their own active owner
+  // membership. This does not impersonate other businesses or bypass their RLS.
+  if (!mayOpen) return <Navigate to="/plataforma" replace />
 
   if (!current) {
     return <Navigate to="/criar-estabelecimento" replace />
   }
 
-  // A área de assinatura permanece acessível para regularização.
-  if (!isSuperadmin && location.pathname !== '/app/assinatura') {
+  // Enforce the same subscription block for owner and superadmin-owner.
+  // The subscription page stays reachable if the account is blocked.
+  if (location.pathname !== '/app/assinatura') {
     if (!state || state.id !== establishmentId) {
       return <div className="mx-auto mt-16 max-w-xl p-8 text-center text-sm text-slate">
         Validando acesso ao estabelecimento...
@@ -87,4 +87,10 @@ export function RequireSuperadmin() {
   const { isSuperadmin } = useAccount()
   if (!isSuperadmin) return <Navigate to="/app" replace />
   return <Outlet />
+}
+
+/** Every fresh sign-in starts at the correct portal. Owners can switch explicitly later. */
+export function PortalHome() {
+  const { isSuperadmin } = useAccount()
+  return <Navigate to={portalHome(isSuperadmin)} replace />
 }

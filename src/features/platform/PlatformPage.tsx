@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAccount } from '@/features/establishments/AccountProvider'
 import { Button } from '@/components/ui/Button'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { EmptyState, ErrorState } from '@/components/ui/States'
@@ -72,6 +74,8 @@ function Kpi({ label, value, icon, hint }: {
 }
 
 export default function PlatformPage() {
+  const { memberships, selectEstablishment } = useAccount()
+  const ownerMembership = memberships.find((m) => m.role === 'owner')
   const [overview, setOverview] = useState<Overview | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -107,9 +111,18 @@ export default function PlatformPage() {
           Os números são consultados diretamente no banco de dados.
         </p>
       </div>
-      <Button type="button" variant="outline" onClick={() => void load()} disabled={loading}>
-        <Icon name="refresh" className="mr-2 inline-block size-4" />Atualizar
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        {ownerMembership && (
+          <Link to="/app" onClick={() => selectEstablishment(ownerMembership.establishment.id)}
+            className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90">
+            <Icon name="store" className="size-4" />
+            Abrir minha barbearia
+          </Link>
+        )}
+        <Button type="button" variant="outline" onClick={() => void load()} disabled={loading}>
+          <Icon name="refresh" className="mr-2 inline-block size-4" />Atualizar
+        </Button>
+      </div>
     </header>
 
     {error && <p role="alert" className="rounded-xl bg-danger-soft p-4 text-sm text-danger">

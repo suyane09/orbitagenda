@@ -30,7 +30,7 @@ export default function LoginPage() {
     let pending = ''
     try { pending = sessionStorage.getItem('orbit:pending-invite') ?? ''; sessionStorage.removeItem('orbit:pending-invite') } catch { /* navegador privado */ }
     const target = from && from.startsWith('/') && !from.startsWith('//') ? from :
-      /^\/aceitar-convite\/[a-f0-9]{64}$/.test(pending) ? pending : '/app'
+      /^\/aceitar-convite\/[a-f0-9]{64}$/.test(pending) ? pending : '/'
     navigate(target, { replace: true })
   }
 
