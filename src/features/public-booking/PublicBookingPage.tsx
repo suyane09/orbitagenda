@@ -1367,6 +1367,7 @@ export default function PublicBookingPage() {
   const [selectedSlot, setSelectedSlot] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+  const [whatsappOptIn, setWhatsappOptIn] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -1587,6 +1588,7 @@ export default function PublicBookingPage() {
           time: formatTime(slot.slot_start, timeZone),
           customer_name: name,
           customer_phone: phoneDigits,
+          whatsapp_opt_in: whatsappOptIn,
           turnstile_token: captchaToken,
         },
       },
@@ -1793,6 +1795,14 @@ export default function PublicBookingPage() {
                     }}
                     placeholder="(82) 99999-9999"
                   />
+
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-hairline bg-paper px-4 py-3 text-sm leading-relaxed">
+                    <input type="checkbox" checked={whatsappOptIn}
+                      onChange={event=>setWhatsappOptIn(event.target.checked)}
+                      className="mt-1 size-4 shrink-0 accent-orbit" />
+                    <span>Autorizo esta barbearia a enviar confirmação, lembrete e aviso de cancelamento
+                      deste agendamento pelo WhatsApp. Opcional; posso solicitar a interrupção das mensagens à empresa.</span>
+                  </label>
 
                   {env.turnstileSiteKey ? (
                     <TurnstileWidget siteKey={env.turnstileSiteKey} handle={captchaRef} onToken={setCaptchaToken} onUnavailable={() => setCaptchaDown(true)} />

@@ -23,6 +23,7 @@ const catalog: NavEntry[] = [
   { label: 'Equipe', to: '/app/equipe', icon: 'users' },
   { label: 'Meu estabelecimento', to: '/app/estabelecimento', icon: 'store' },
   { label: 'Plano e assinatura', to: '/app/assinatura', icon: 'cash' },
+  { label: 'WhatsApp automático', to: '/app/whatsapp', icon: 'link' },
 ]
 
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join('') || '·'
@@ -88,13 +89,16 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <p className="px-2.5 pb-1.5 text-xs text-white/30">Operação</p>
             <div className="space-y-0.5">{operation.filter((e) => !['/app/financeiro', '/app/comissoes', '/app/relatorios'].includes(e.to) || current.role === 'owner').map((e) => <NavItem key={e.to} entry={e} onNavigate={onNavigate} />)}</div>
             <p className="px-2.5 pb-1.5 pt-5 text-xs text-white/30">Catálogo</p>
-            <div className="space-y-0.5">{catalog.filter(e => !['/app/equipe','/app/estabelecimento','/app/assinatura'].includes(e.to) || current.role === 'owner').map((e) => <NavItem key={e.to} entry={e} onNavigate={onNavigate} />)}</div>
+            <div className="space-y-0.5">{catalog.filter(e => !['/app/equipe','/app/estabelecimento','/app/assinatura','/app/whatsapp'].includes(e.to) || current.role === 'owner').map((e) => <NavItem key={e.to} entry={e} onNavigate={onNavigate} />)}</div>
           </>
         )}
         {isSuperadmin && (
           <div className="space-y-0.5">
             <p className="px-2.5 pb-1.5 text-xs text-white/30">Minha plataforma</p>
             <NavItem entry={{ label: 'Visão geral', to: '/plataforma', icon: 'chart', end: true }} onNavigate={onNavigate} />
+            {current?.role === 'owner' && (
+              <NavItem entry={{ label: 'WhatsApp piloto', to: '/plataforma/whatsapp-teste', icon: 'link' }} onNavigate={onNavigate} />
+            )}
             <p className="px-2.5 pt-4 text-xs leading-relaxed text-white/40">
               Indicadores, estabelecimentos e assinaturas em um só lugar.
             </p>

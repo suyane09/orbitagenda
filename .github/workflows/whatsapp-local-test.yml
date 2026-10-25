@@ -38,3 +38,13 @@ jobs:
           printf 'POSTGRES_PASSWORD=test_only_very_long_placeholder\nAUTHENTICATION_API_KEY=test_only_very_long_placeholder\n' > tools/whatsapp-local/.env
           docker compose --env-file tools/whatsapp-local/.env -f tools/whatsapp-local/compose.yaml config --quiet
           test "$(grep -c '127.0.0.1:8088:8080' tools/whatsapp-local/compose.yaml)" -eq 1
+
+  worker-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate Node outbound worker
+        run: node --check tools/whatsapp-local/worker.mjs

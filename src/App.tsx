@@ -15,6 +15,7 @@ const ResetPasswordPage = lazy(() => import('@/features/auth/ResetPasswordPage')
 const OnboardingPage = lazy(() => import('@/features/establishments/OnboardingPage'))
 const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPage'))
 const PlatformPage = lazy(() => import('@/features/platform/PlatformPage'))
+const WhatsAppPage = lazy(() => import('@/features/whatsapp/WhatsAppPage'))
 const ServicesPage = lazy(() => import('@/features/services/ServicesPage'))
 const ProfessionalsPage = lazy(() => import('@/features/professionals/ProfessionalsPage'))
 const CustomersPage = lazy(() => import('@/features/customers/CustomersPage'))
@@ -66,10 +67,12 @@ export default function App() {
                     <Route path="/app/relatorios" element={<ReportsPage />} />
                     <Route path="/app/equipe" element={<TeamPage />} />
                     <Route path="/app/assinatura" element={<SubscriptionPage />} />
+                    <Route path="/app/whatsapp" element={<WhatsAppPage />} />
                     <Route path="/app/estabelecimento" element={<EstablishmentSettingsPage />} />
                   </Route>
                   <Route element={<RequireSuperadmin />}>
                     <Route path="/plataforma" element={<PlatformPage />} />
+                    <Route path="/plataforma/whatsapp-teste" element={<WhatsAppPage />} />
                   </Route>
                 </Route>
               </Route>
