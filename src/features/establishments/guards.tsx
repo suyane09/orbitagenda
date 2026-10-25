@@ -36,8 +36,15 @@ export function RequireEstablishment() {
     return () => { cancelled = true }
   }, [establishmentId, isSuperadmin, location.pathname])
 
+  // Administração da plataforma e operação de um estabelecimento são áreas distintas.
+  // Uma pessoa que também seja proprietária de um estabelecimento usa somente
+  // a Central da Plataforma enquanto tiver o papel de superadministradora.
+  if (isSuperadmin) {
+    return <Navigate to="/plataforma" replace />
+  }
+
   if (!current) {
-    return <Navigate to={isSuperadmin ? '/plataforma' : '/criar-estabelecimento'} replace />
+    return <Navigate to="/criar-estabelecimento" replace />
   }
 
   // A área de assinatura permanece acessível para regularização.
