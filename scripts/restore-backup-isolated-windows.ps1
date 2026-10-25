@@ -31,7 +31,7 @@ function Docker([string[]]$Arguments) {
   return $txt.Trim()
 }
 function Q([string]$Sql) {
-  (Docker @('exec',$target,'psql','-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-U','postgres','-d','postgres','-c',$Sql)).Trim()
+  (Docker -Arguments @('exec',$target,'psql','-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-U','postgres','-d','postgres','-c',$Sql)).Trim()
 }
 try {
   $names = @('roles.sql','schema.sql','data.sql')
@@ -80,13 +80,13 @@ try {
     StopSafe 'Unexpected local project ID or port'
   }
   if (-not (Get-Command docker.exe -ErrorAction SilentlyContinue)) { StopSafe 'Docker is not installed' }
-  if ((Docker @('inspect','--format','{{.Name}}',$target)) -cne ('/' + $target)) {
+  if ((Docker -Arguments @('inspect','--format','{{.Name}}',$target)) -cne ('/' + $target)) {
     StopSafe 'Wrong Docker target name'
   }
-  if ((Docker @('inspect','--format','{{.State.Status}}',$target)) -cne 'running') {
+  if ((Docker -Arguments @('inspect','--format','{{.State.Status}}',$target)) -cne 'running') {
     StopSafe 'Target is not running'
   }
-  if ((Docker @('port',$target,'5432/tcp')) -notmatch ':54622(?:\s|$)') {
+  if ((Docker -Arguments @('port',$target,'5432/tcp')) -notmatch ':54622(?:\s|$)') {
     StopSafe 'Docker mapping is not local port 54622'
   }
   if ((Q 'SHOW server_version;') -notmatch '^17\.') {
@@ -103,11 +103,11 @@ try {
 
   foreach ($filename in $names) {
     $remote = '/tmp/orbitagenda-import-' + $filename
-    [void](Docker @('cp',(Join-Path $BackupDir $filename),($target + ':' + $remote)))
+    [void](Docker -Arguments @('cp',(Join-Path $BackupDir $filename),($target + ':' + $remote)))
     $remoteFiles += $remote
   }
   Write-Host 'RESTORING_IN_ONE_TRANSACTION (not connected to production)'
-  [void](Docker @('exec',$target,'psql','-X','-q','-U','postgres','-d','postgres',
+  [void](Docker -Arguments @('exec',$target,'psql','-X','-q','-U','postgres','-d','postgres',
     '-v','ON_ERROR_STOP=1','--single-transaction',
     '-f',$remoteFiles[0],'-f',$remoteFiles[1],
     '-c','SET session_replication_role = replica',
@@ -176,7 +176,7 @@ END $check$;
   }
 } finally {
   foreach ($remote in $remoteFiles) {
-    try { [void](Docker @('exec',$target,'rm','-f',$remote)) }
+    try { [void](Docker -Arguments @('exec',$target,'rm','-f',$remote)) }
     catch { Write-Host 'WARNING: private /tmp SQL cleanup must be checked in the fourth container.' }
   }
 }
