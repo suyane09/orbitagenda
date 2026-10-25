@@ -1,0 +1,44 @@
+name: WhatsApp cloud draft checks
+on:
+  pull_request:
+    paths:
+      - 'tools/whatsapp-cloud/**'
+      - 'ops/render-whatsapp/**'
+      - 'supabase/functions/whatsapp-cloud-worker/**'
+      - '.github/workflows/whatsapp-cloud-check.yml'
+  push:
+    paths:
+      - 'tools/whatsapp-cloud/**'
+      - 'ops/render-whatsapp/**'
+      - 'supabase/functions/whatsapp-cloud-worker/**'
+      - '.github/workflows/whatsapp-cloud-check.yml'
+jobs:
+  cloud-worker-parse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check cloud worker syntax
+        run: node --check tools/whatsapp-cloud/worker.mjs
+  render-blueprint-parse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check render.yaml YAML parsing and resource names
+        run: |
+          python -m pip install pyyaml
+          python - <<'PY'
+          import yaml
+          path='ops/render-whatsapp/render.yaml'
+          with open(path,encoding='utf-8') as f:
+              doc=yaml.safe_load(f)
+          names=[svc['name'] for svc in doc['services']]
+          assert len(names)==len(set(names))
+          assert all(x.startswith('orbitagenda-whatsapp-') for x in names)
+          assert {x['type'] for x in doc['services']} == {'keyvalue','pserv','worker'}
+          assert doc['databases'][0]['ipAllowList']==[]
+          assert next(x for x in doc['services'] if x['type']=='keyvalue')['ipAllowList']==[]
+          print('Blueprint YAML parsed. Render platform validation required before deployment.')
+          PY
