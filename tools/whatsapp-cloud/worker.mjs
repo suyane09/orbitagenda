@@ -5,9 +5,10 @@ import { setTimeout as pause } from 'node:timers/promises'
 const supabase=process.env.SUPABASE_URL
 const publishable=process.env.SUPABASE_PUBLISHABLE_KEY
 const secret=process.env.ORBIT_WHATSAPP_CLOUD_SECRET
-const evoUrl=(process.env.EVOLUTION_INTERNAL_URL||'').replace(/\/$/,'')
+const hostport=process.env.EVOLUTION_INTERNAL_HOSTPORT||''
+const evoUrl='http://'+hostport
 const evoKey=process.env.EVOLUTION_API_KEY
-const evoOrigin=process.env.EVOLUTION_ORIGIN
+const evoOrigin=evoUrl
 const profile=/^https:\/\/[a-z0-9-]+\.supabase\.co$/
 const instances=new Map()
 let quitting=false
@@ -17,7 +18,7 @@ function validateConfig(){
  if(!profile.test(supabase||''))throw Error('SUPABASE_URL invalida.')
  if(!/^(sb_publishable_[\w-]+|eyJ[\w.\-]+)$/.test(publishable||''))throw Error('Supabase publishable key ausente.')
  if(!/^[a-f0-9]{64}$/.test(secret||''))throw Error('Secret de cloud worker ausente.')
- if(!/^http:\/\/[a-z0-9-]+:[0-9]{2,5}$/.test(evoUrl))throw Error('Use um endereco PRIVATE Render para Evolution, nao publico.')
+ if(!/^[a-z0-9-]+:[0-9]{2,5}$/.test(hostport))throw Error('Use hostport privado de Render para Evolution.')
  if(!/^[a-f0-9]{64}$/.test(evoKey||''))throw Error('Evolution apikey ausente.')
  if(!/^http:\/\/[a-z0-9-]+:[0-9]{2,5}$/.test(evoOrigin||''))throw Error('Evolution Origin invalido.')
 }
