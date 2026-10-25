@@ -33,8 +33,11 @@ begin
  raise notice 'PASS minimal private guard access granted only to backend service role';
 end $$;
 
+-- The minimal CI shim creates service_role without normal Supabase cloud table grants.
+-- Mirror ONLY the services SELECT privilege present on the live hosted instance.
+grant select on public.services to service_role;
 set role service_role;
-do $$
+do $
 declare
   v_est uuid := current_setting('test.est')::uuid;
 begin
