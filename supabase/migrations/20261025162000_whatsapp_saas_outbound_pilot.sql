@@ -300,8 +300,10 @@ revoke all on function private.whatsapp_authorized_worker(text),
  private.whatsapp_appointment_changed() from public,anon,authenticated;
 grant execute on function public.whatsapp_begin_pairing(uuid),
  public.whatsapp_set_enabled(uuid,boolean) to authenticated;
+-- All worker RPCs are called ONLY by the server-side whatsapp-worker Edge Function.
+-- Anonymous clients have no direct EXECUTE on these SECURITY DEFINER functions.
 grant execute on function public.whatsapp_worker_pair(text),
  public.whatsapp_worker_report(text,text,text),
  public.whatsapp_worker_poll(text),
- public.whatsapp_worker_finish(text,uuid,boolean,text,text) to anon,authenticated;
+ public.whatsapp_worker_finish(text,uuid,boolean,text,text) to service_role;
 grant insert on public.whatsapp_appointment_consents to service_role;
