@@ -169,6 +169,17 @@ return respond({ slots: slots ?? [] })
         console.error('public-booking: create_public_booking falhou', error.code) // só o código; nunca a mensagem/dados
         return respond({ error: 'booking_failed' }, 500)
       }
+      // Consent is strictly optional, per booking and explicitly given on the public
+      // form. Store server-side only AFTER Turnstile, rate limits and successful booking.
+      // If unavailable, preserve the booking but never send WhatsApp without consent.
+      if (body.whatsapp_opt_in === true) {
+        const { error: consentError } = await db.from('whatsapp_appointment_consents')
+          .insert({ appointment_id: data, establishment_id: est.id })
+        if (consentError) {
+          // Do not log customer data; an unavailable feature must not undo a booking.
+          console.error('public-booking: whatsapp consent unavailable', consentError.code)
+        }
+      }
       return respond({ booking_id: data, status: 'scheduled' }, 201)
     }
     return respond({ error: 'unknown_action' }, 400)
