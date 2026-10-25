@@ -96,6 +96,9 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <div className="space-y-0.5">
             <p className="px-2.5 pb-1.5 text-xs text-white/30">Minha plataforma</p>
             <NavItem entry={{ label: 'Visão geral', to: '/plataforma', icon: 'chart', end: true }} onNavigate={onNavigate} />
+            {current?.role === 'owner' && (
+              <NavItem entry={{ label: 'WhatsApp piloto', to: '/plataforma/whatsapp-teste', icon: 'link' }} onNavigate={onNavigate} />
+            )}
             <p className="px-2.5 pt-4 text-xs leading-relaxed text-white/40">
               Indicadores, estabelecimentos e assinaturas em um só lugar.
             </p>
