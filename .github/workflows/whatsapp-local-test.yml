@@ -1,0 +1,40 @@
+name: WhatsApp local pilot syntax
+on:
+  pull_request:
+    paths:
+      - 'tools/whatsapp-local/**'
+      - '.github/workflows/whatsapp-local-test.yml'
+  push:
+    paths:
+      - 'tools/whatsapp-local/**'
+      - '.github/workflows/whatsapp-local-test.yml'
+
+jobs:
+  powershell-parser:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: PowerShell 5.1 syntax
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $pwd 'tools/whatsapp-local/testar.ps1'),
+            [ref]$tokens,
+            [ref]$errors)
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.ToString() }
+            exit 1
+          }
+          Write-Host "PowerShell 5.1 syntax OK."
+
+  compose-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate isolated Docker Compose configuration
+        run: |
+          printf 'POSTGRES_PASSWORD=test_only_very_long_placeholder\nAUTHENTICATION_API_KEY=test_only_very_long_placeholder\n' > tools/whatsapp-local/.env
+          docker compose --env-file tools/whatsapp-local/.env -f tools/whatsapp-local/compose.yaml config --quiet
+          test "$(grep -c '127.0.0.1:8088:8080' tools/whatsapp-local/compose.yaml)" -eq 1
