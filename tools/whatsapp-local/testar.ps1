@@ -2,7 +2,7 @@
 # No production mutations. QR + explicit one-recipient test only.
 [CmdletBinding()]
 param(
-  [ValidateSet('iniciar','qr','status','enviar','parar')]
+  [ValidateSet('iniciar','qr','status','enviar','parar','diagnostico')]
   [string]$Acao = 'iniciar',
   [string]$Destino = ''
 )
@@ -51,10 +51,42 @@ function Invoke-Evo([string]$method, [string]$path, $payload = $null) {
 }
 
 function Assert-LocalApi {
+  # The root path can return an HTTP error even when Docker listens on port 8088.
+  # Check an authenticated endpoint rather than misreporting it as Docker offline.
   try {
-    $null = Invoke-WebRequest -Uri $apiUrl -UseBasicParsing -TimeoutSec 5
+    $null = Invoke-Evo 'GET' '/instance/fetchInstances'
   } catch {
-    throw 'Evolution API nao responde em 127.0.0.1:8088. Execute -Acao iniciar e confira se o Docker esta aberto.'
+    $httpStatus = $null
+    if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+      $httpStatus = [int]$_.Exception.Response.StatusCode
+    }
+    if ($null -ne $httpStatus) {
+      throw "Evolution API responde, mas a rota autenticada falhou (HTTP $httpStatus). Verifique a chave local e os logs; nao apague os containers."
+    }
+    $reason = $_.Exception.Message
+    throw "Nao foi possivel completar a chamada HTTP local em 127.0.0.1:8088: $reason. Use -Acao diagnostico para verificar."
+  }
+}
+
+function Show-LocalDiagnostic {
+  Write-Host 'Diagnostico local do WhatsApp (sem divulgar chaves ou mensagens):'
+  if (Get-Command docker -ErrorAction SilentlyContinue) {
+    & docker ps -a --filter 'name=orbitagenda-whatsapp-local' --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+  }
+  if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+    Write-Host 'Resposta HTTP publica da raiz, sem usar proxy:'
+    & curl.exe --noproxy '*' --max-time 10 -sS -o NUL -w 'Codigo HTTP: %{http_code}' "$apiUrl/"
+    Write-Host ''
+  }
+  if (-not (Test-Path -LiteralPath $envFile)) {
+    Write-Host 'Arquivo .env local ainda nao existe. Execute -Acao iniciar.' -ForegroundColor Yellow
+    return
+  }
+  try {
+    Assert-LocalApi
+    Write-Host 'Rota autenticada da Evolution API: OK.' -ForegroundColor Green
+  } catch {
+    Write-Host $_.Exception.Message -ForegroundColor Yellow
   }
 }
 
@@ -78,17 +110,19 @@ function Start-LocalStack {
   & docker compose --project-name $projectName --env-file $envFile -f $composeFile up -d
   if ($LASTEXITCODE -ne 0) { throw 'Falha ao iniciar Docker Compose. Veja a mensagem acima.' }
   $ready = $false
-  for ($i=0; $i -lt 45; $i++) {
+  $lastError = ''
+  for ($i=0; $i -lt 25; $i++) {
     try {
-      $null = Invoke-WebRequest -Uri $apiUrl -UseBasicParsing -TimeoutSec 3
+      Assert-LocalApi
       $ready = $true
       break
     } catch {
+      $lastError = $_.Exception.Message
       Start-Sleep -Seconds 3
     }
   }
   if (-not $ready) {
-    throw 'Evolution API ainda indisponivel. Use: docker compose --project-name orbitagenda-whatsapp-local --env-file .env -f compose.yaml logs --tail 50 evolution'
+    throw "Evolution API ainda indisponivel. Ultimo teste: $lastError"
   }
   Write-Host 'Evolution API respondendo localmente em 127.0.0.1:8088.' -ForegroundColor Green
 }
@@ -162,6 +196,9 @@ function Show-Qr($initial) {
 }
 
 switch ($Acao) {
+  'diagnostico' {
+    Show-LocalDiagnostic
+  }
   'iniciar' {
     Start-LocalStack
     $newInstance = Ensure-Instance
