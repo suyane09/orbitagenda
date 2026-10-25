@@ -297,7 +297,8 @@ revoke all on function public.whatsapp_begin_pairing(uuid),
 from public,anon,authenticated;
 revoke all on function private.whatsapp_authorized_worker(text),
  private.whatsapp_queue_appointment(uuid,text),
- private.whatsapp_appointment_changed() from public,anon,authenticated;
+ private.whatsapp_appointment_changed(),
+ private.whatsapp_consent_created() from public,anon,authenticated;
 grant execute on function public.whatsapp_begin_pairing(uuid),
  public.whatsapp_set_enabled(uuid,boolean) to authenticated;
 -- All worker RPCs are called ONLY by the server-side whatsapp-worker Edge Function.
