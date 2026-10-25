@@ -121,3 +121,14 @@ jobs:
             }
             Write-Host "PowerShell syntax OK: $path"
           }
+      - name: Refuse missing backup without any database action
+        shell: pwsh
+        run: |
+          $script = (Resolve-Path 'scripts/restore-backup-isolated-windows.ps1').Path
+          $missing = Join-Path $env:RUNNER_TEMP 'missing-orbitagenda-private-backup'
+          & pwsh -NoProfile -NonInteractive -File $script -BackupDir $missing -LocalProjectDir $missing *>&1 | Out-String | Set-Content -Path (Join-Path $env:RUNNER_TEMP 'restore-preflight.txt')
+          if ($LASTEXITCODE -eq 0) { throw 'Unsafe: missing backup was accepted' }
+          if (-not (Select-String -Path (Join-Path $env:RUNNER_TEMP 'restore-preflight.txt') -Pattern 'VERIFICACAO_PENDENTE' -Quiet)) {
+            throw 'Expected preflight rejection missing'
+          }
+          Write-Host 'PASS: absent backup refused before Docker activity'
