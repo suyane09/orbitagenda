@@ -76,6 +76,9 @@ begin
     values(p_establishment_id,'oa_' || replace(p_establishment_id::text,'-',''),'pending',false,null,null,now())
     on conflict(establishment_id) do update set state='pending',enabled=false,qr_image=null,
       qr_expires_at=null,updated_at=now();
+  -- Prevent old queued messages from a previous device being sent from a new number.
+  update public.whatsapp_outbox set state='cancelled'
+    where establishment_id=p_establishment_id and state='queued';
   insert into private.whatsapp_worker_auth(establishment_id,pairing_hash,pairing_expires_at,token_hash)
     values(p_establishment_id,encode(sha256(convert_to(v_code,'UTF8')),'hex'),now()+interval '10 minutes',null)
     on conflict(establishment_id) do update set
@@ -189,7 +192,7 @@ begin
    v_due:=now();
  else return;
  end if;
- v_key:=p_kind||':'||v.starts_at::text; -- unique across reschedules
+ v_key:=v.id::text||':'||p_kind||':'||v.starts_at::text; -- per appointment, per event
  if p_kind='cancellation' then
    v_body:=format('Olá, %s! O agendamento em %s para %s às %s foi cancelado.',
       left(v.full_name,70),left(v.establishment_name,70),
