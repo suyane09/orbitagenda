@@ -37,7 +37,7 @@ end $$;
 -- Mirror ONLY the services SELECT privilege present on the live hosted instance.
 grant select on public.services to service_role;
 set role service_role;
-do $
+do $test$
 declare
   v_est uuid := current_setting('test.est')::uuid;
 begin
