@@ -212,21 +212,19 @@ begin
  on conflict(establishment_id,dedupe_key) do nothing;
 end $$;
 
-create function public.whatsapp_record_booking_consent(p_appointment_id uuid)
-returns void language plpgsql security definer set search_path=''
+-- The public booking backend writes this consent using its server-side admin client.
+-- The consent insert is atomic; no browser can add consent on behalf of another customer.
+create function private.whatsapp_consent_created()
+returns trigger language plpgsql security definer set search_path=''
 as $$
-declare v_est uuid;
 begin
- -- Called only from the confirmed public-booking Edge Function, never the browser.
- if current_user<>'service_role' then
-   raise exception 'forbidden' using errcode='42501';end if;
- select establishment_id into v_est from public.appointments where id=p_appointment_id;
- if not found then return;end if;
- insert into public.whatsapp_appointment_consents(appointment_id,establishment_id)
- values(p_appointment_id,v_est) on conflict do nothing;
- perform private.whatsapp_queue_appointment(p_appointment_id,'confirmation');
- perform private.whatsapp_queue_appointment(p_appointment_id,'reminder');
+  perform private.whatsapp_queue_appointment(new.appointment_id,'confirmation');
+  perform private.whatsapp_queue_appointment(new.appointment_id,'reminder');
+  return new;
 end $$;
+create trigger whatsapp_consent_created after insert
+on public.whatsapp_appointment_consents for each row
+execute function private.whatsapp_consent_created();
 
 create function private.whatsapp_appointment_changed()
 returns trigger language plpgsql security definer set search_path=''
@@ -292,8 +290,7 @@ revoke all on function public.whatsapp_begin_pairing(uuid),
  public.whatsapp_worker_pair(text),
  public.whatsapp_worker_report(text,text,text),
  public.whatsapp_worker_poll(text),
- public.whatsapp_worker_finish(text,uuid,boolean,text,text),
- public.whatsapp_record_booking_consent(uuid)
+ public.whatsapp_worker_finish(text,uuid,boolean,text,text)
 from public,anon,authenticated;
 revoke all on function private.whatsapp_authorized_worker(text),
  private.whatsapp_queue_appointment(uuid,text),
@@ -304,4 +301,4 @@ grant execute on function public.whatsapp_worker_pair(text),
  public.whatsapp_worker_report(text,text,text),
  public.whatsapp_worker_poll(text),
  public.whatsapp_worker_finish(text,uuid,boolean,text,text) to anon,authenticated;
-grant execute on function public.whatsapp_record_booking_consent(uuid) to service_role;
+grant insert on public.whatsapp_appointment_consents to service_role;
