@@ -27,6 +27,8 @@ on:
       - 'scripts/browser-smoke.mjs'
       - 'scripts/asaas-sandbox-e2e.mjs'
       - 'scripts/test-db-windows.ps1'
+      - 'scripts/backup-producao-readonly.ps1'
+      - 'docs/recovery-drift-audit-2026-10-24.md'
       - '.gitattributes'
       - '.github/workflows/commission-review.yml'
   workflow_dispatch:
@@ -109,4 +111,14 @@ jobs:
             $parseErrors | ForEach-Object { Write-Error $_.Message }
             exit 1
           }
-          Write-Host 'PowerShell syntax OK'
+          $file = (Resolve-Path 'scripts/backup-producao-readonly.ps1').Path
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $file, [ref]$tokens, [ref]$parseErrors
+          ) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host 'PowerShell syntax OK for both scripts'
