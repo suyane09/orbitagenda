@@ -7,7 +7,7 @@ import { AsaasBillingPanel } from './AsaasBillingPanel'
 
 type Subscription = {
   status: string; started_at: string; current_period_end: string | null; payment_due_at: string | null;
-  plan_id: string; notes: string; asaas_subscription_id: string | null; asaas_provisioning_started_at: string | null
+  plan_id: string; notes: string; asaas_subscription_id: string | null; asaas_provisioning_started_at: string | null; asaas_environment: string | null
 }
 type Plan = { id: string; name: string; monthly_price_cents: number | null }
 
@@ -24,12 +24,15 @@ export default function SubscriptionPage() {
   const [loading,setLoading] = useState(true)
   const [error,setError] = useState('')
   const [refreshing,setRefreshing] = useState(false)
+  const [checkingSandbox,setCheckingSandbox] = useState(false)
+  const [sandboxNotice,setSandboxNotice] = useState('')
+  const [sandboxError,setSandboxError] = useState('')
   const load = useCallback(async()=>{
     if(!owner||!id) {setLoading(false);return}
     setLoading(true);setError('')
     try {
       const s=await supabase.from('establishment_subscriptions')
-        .select('status,started_at,current_period_end,payment_due_at,plan_id,notes,asaas_subscription_id,asaas_provisioning_started_at')
+        .select('status,started_at,current_period_end,payment_due_at,plan_id,notes,asaas_subscription_id,asaas_provisioning_started_at,asaas_environment')
         .eq('establishment_id',id).maybeSingle()
       if(s.error)throw s.error
       setSub(s.data as Subscription|null)
@@ -43,6 +46,28 @@ export default function SubscriptionPage() {
     finally{setLoading(false)}
   },[id,owner])
   useEffect(()=>{void load()},[load])
+  async function checkSandboxPayment() {
+    if(!owner || !id || !sub?.asaas_subscription_id || sub.asaas_environment !== 'sandbox'
+      || sub.status !== 'past_due' || checkingSandbox) return
+    setSandboxNotice('');setSandboxError('');setCheckingSandbox(true)
+    try {
+      const {data,error:invokeError}=await supabase.functions.invoke('asaas-sandbox-sync',{
+        body:{establishmentId:id},
+      })
+      if(invokeError) {
+        const response=(invokeError as {context?:Response}).context
+        const result=response && typeof response.json==='function'
+          ? await response.json().catch(()=>null) : null
+        throw new Error(typeof result?.message==='string'
+          ? result.message : 'Não foi possível consultar o Asaas Sandbox.')
+      }
+      if(!data || typeof data.message!=='string')throw Error('Resposta inválida do servidor.')
+      setSandboxNotice(data.message)
+      await load()
+    } catch(err) {
+      setSandboxError(err instanceof Error?err.message:'Não foi possível consultar o Asaas Sandbox.')
+    } finally {setCheckingSandbox(false)}
+  }
   if(!owner)return <p className="text-sm text-slate">Área disponível apenas para o proprietário.</p>
   const awaitingFirstPayment = sub?.status === 'past_due' && !sub?.asaas_subscription_id
   const statusTone = sub?.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : sub?.status === 'trialing' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-paper text-slate border-hairline'
@@ -89,6 +114,22 @@ export default function SubscriptionPage() {
         </div>
         {sub.notes&&!sub.asaas_subscription_id&&<p className="mx-6 mb-6 rounded-xl bg-paper px-4 py-3 text-sm leading-relaxed text-slate sm:mx-8">{sub.notes}</p>}
       </section>
+      {sub.asaas_environment==='sandbox' && !!sub.asaas_subscription_id && sub.status==='past_due' && (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 sm:p-6">
+          <h3 className="font-display text-lg font-semibold">Pagamento confirmado no Sandbox, mas ainda pendente aqui?</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate">
+            Consulte a cobrança existente diretamente no Asaas. Só será registrada se o provedor
+            confirmar pagamento, assinatura, proprietário e valor. Nenhuma cobrança nova será criada.
+          </p>
+          <button type="button" disabled={checkingSandbox}
+            onClick={()=>void checkSandboxPayment()}
+            className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-ink px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-wait disabled:opacity-50">
+            {checkingSandbox?'Verificando pagamento…':'Conferir pagamento no Asaas Sandbox'}
+          </button>
+          {sandboxNotice && <p role="status" className="mt-3 text-sm text-emerald-700">{sandboxNotice}</p>}
+          {sandboxError && <p role="alert" className="mt-3 text-sm text-red-700">{sandboxError}</p>}
+        </section>
+      )}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(240px,.65fr)]">
         {plan?.monthly_price_cents != null && plan.monthly_price_cents > 0
           ? <AsaasBillingPanel establishmentId={id} planPrice={plan.monthly_price_cents} linked={!!sub.asaas_subscription_id} provisioning={!!sub.asaas_provisioning_started_at} onFinished={load}/>
