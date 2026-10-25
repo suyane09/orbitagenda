@@ -21,6 +21,7 @@ on:
       - 'src/lib/**'
       - 'README.md'
       - 'supabase/migrations/**'
+      - 'supabase/audits/**'
       - 'supabase/tests/**'
       - 'src/components/layout/AppShell.tsx'
       - 'package*.json'
