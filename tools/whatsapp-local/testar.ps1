@@ -8,6 +8,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $apiUrl = 'http://127.0.0.1:8088'
+# The API requires an allowed Origin even for PowerShell/curl without browser CORS.
+# This matches the localhost-only CORS_ORIGIN value in compose.yaml.
+$apiOrigin = 'http://localhost:8088'
 $instanceName = 'orbitagenda_teste'
 $projectName = 'orbitagenda-whatsapp-local'
 $composeFile = Join-Path $PSScriptRoot 'compose.yaml'
@@ -41,7 +44,7 @@ function Read-ApiKey {
 }
 
 function Invoke-Evo([string]$method, [string]$path, $payload = $null) {
-  $headers = @{ apikey = (Read-ApiKey) }
+  $headers = @{ apikey = (Read-ApiKey); Origin = $apiOrigin }
   $args = @{ Uri = "$apiUrl$path"; Method = $method; Headers = $headers; TimeoutSec = 15 }
   if ($null -ne $payload) {
     $args['ContentType'] = 'application/json; charset=utf-8'
@@ -75,7 +78,7 @@ function Show-LocalDiagnostic {
   }
   if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
     Write-Host 'Resposta HTTP publica da raiz, sem usar proxy:'
-    & curl.exe --noproxy '*' --max-time 10 -sS -o NUL -w 'Codigo HTTP: %{http_code}' "$apiUrl/"
+    & curl.exe --noproxy '*' --max-time 10 -sS -o NUL -w 'Codigo HTTP: %{http_code}' -H "Origin: $apiOrigin" "$apiUrl/"
     Write-Host ''
   }
   if (-not (Test-Path -LiteralPath $envFile)) {

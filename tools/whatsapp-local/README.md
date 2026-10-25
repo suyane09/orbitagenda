@@ -52,7 +52,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\testar.ps1 -Acao parar
 
 ## Diagnóstico quando o Docker está em execução mas o QR não abre
 
-A porta TCP aberta (`Test-NetConnection 127.0.0.1 -Port 8088`) **não garante** que a API esteja pronta. As versões anteriores do script testavam só o endpoint raiz e classificavam qualquer erro HTTP como “Docker desligado”. Na versão corrigida, o script usa a rota autenticada `/instance/fetchInstances` e mostra o código de erro sem imprimir a resposta, que poderia conter tokens de sessão.
+A porta TCP aberta (`Test-NetConnection 127.0.0.1 -Port 8088`) **não garante** que a API esteja pronta. Na Evolution API v2.3.7, uma chamada sem cabeçalho HTTP `Origin` pode receber `500 Not allowed by CORS`; o script passou a enviar `Origin: http://localhost:8088` em chamadas locais, conforme `CORS_ORIGIN` do Compose. Não é preciso definir CORS `*` nem reiniciar os containers. As versões anteriores do script testavam só o endpoint raiz e classificavam qualquer erro HTTP como “Docker desligado”. Na versão corrigida, o script usa a rota autenticada `/instance/fetchInstances` e mostra o código de erro sem imprimir a resposta, que poderia conter tokens de sessão.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\\testar.ps1 -Acao diagnostico
