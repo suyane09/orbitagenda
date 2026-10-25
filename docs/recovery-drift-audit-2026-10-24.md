@@ -89,3 +89,13 @@ Asaas Sandbox ainda depende de devolução realmente concluída `DONE` / `REFUND
 Requisitos: Windows, npx, Docker Desktop, Supabase CLI autenticada, *pasta do projeto vinculada ao projeto correto*. O script aborta se o projeto não estiver vinculado ou ID não corresponder. Os dumps são confidenciais (dados Auth e pessoais) e devem ficar **criptografados fora do repositório**. Sua execução não é prova de restauração: testar em uma instância **nova** e isolada, pois importar novamente no clone de 22 tabelas sobrescreveria/colidiria com os dados.
 
 Nenhuma consulta de metadados, inventário ou comentário de GitHub deste documento modificou a produção.
+
+## Pré-lançamento — nova checagem readonly
+
+- `supabase/audits/release_readiness_readonly.sql` executado no projeto remoto, sem escrita: `public_tables_at_least_22=OK` e `public_rls_all_enabled=OK`.
+- **PENDENTE:** `platform_admin_provisioned` — `public.platform_admins` vazio; `private.is_superadmin()` depende exclusivamente desta tabela. Logo, a gestão administrativa de planos não possui usuário provisionado.
+- **PENDENTE:** `asaas_reversals_rpc_present` — RPC de reversão ainda ausente do banco online.
+- **PENDENTE:** `asaas_reconciliation_schema_present` — tabela de auditoria e RPC de conciliação ausentes do banco online.
+- A Edge Function `asaas-reconcile` não está publicada: foram identificadas somente `public-booking` (v18), `asaas-subscribe` (v14) e `asaas-webhook` (v16). O webhook online ainda ignora eventos de reversão. A branch em homologação cria `asaas_reconciliation_runs`, portanto, **após o release revisado, a contagem de tabelas pode passar de 22 para 23** — o número 22 descreve o estado antigo do banco, não um teto definitivo.
+- Antes de operar com usuários pagantes, verificar identidade do administrador designado, backup atual e restauração independente, compatibilidade das migrations, implantação de funções/segredos, webhooks reais, Turnstile e políticas de privacidade. Não autorizar ativação real apenas pelos checks estruturais.
+- Seguimento em #20 (bootstrap do admin), #19 (backup e drift) e #13 (Asaas). Nenhuma operação remota de escrita foi executada.
