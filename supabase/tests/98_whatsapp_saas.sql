@@ -35,8 +35,8 @@ do $$begin
 end $$;
 reset role;
 
--- Simulate anonymous, token-scoped local outbound worker.
-set role anon;
+-- Simulate the server-side Edge bridge only; never grant anon direct RPC access.
+set role service_role;
 select set_config('test.wa.token',
   (public.whatsapp_worker_pair(current_setting('test.wa.code')) ->> 'token'),false);
 do $$begin
@@ -80,7 +80,10 @@ do $$begin
 end $$;
 reset role;
 
-do $$begin
+do $begin
+ if has_function_privilege('anon','public.whatsapp_worker_pair(text)','EXECUTE') or
+    has_function_privilege('anon','public.whatsapp_worker_poll(text)','EXECUTE') then
+   raise exception 'FAIL anonymous worker RPC allowed';end if;
  if has_table_privilege('anon','public.whatsapp_outbox','SELECT') or
     has_table_privilege('authenticated','public.whatsapp_outbox','UPDATE') or
     has_table_privilege('anon','private.whatsapp_worker_auth','SELECT') then
