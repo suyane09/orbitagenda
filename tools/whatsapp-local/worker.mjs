@@ -43,14 +43,21 @@ function validateEnv(e) {
     throw Error('AUTHENTICATION_API_KEY local invalida.')
 }
 async function rpc(e, name, data) {
-  const response = await fetch(`${e.SUPABASE_URL}/rest/v1/rpc/${name}`,{
+  // Edge Function validates token/code and uses server-side credentials.
+  // Publishable-only key is safe for this local client.
+  if (!/^whatsapp_worker_(pair|report|poll|finish)$/.test(name))
+    throw Error('Acao de worker nao permitida.')
+  const action=name.replace('whatsapp_worker_','')
+  const response=await fetch(`${e.SUPABASE_URL}/functions/v1/whatsapp-worker`,{
     method:'POST',signal:AbortSignal.timeout(15000),
     headers:{apikey:e.SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'},
-    body:JSON.stringify(data),
+    body:JSON.stringify({action,...data}),
   })
-  if (!response.ok) throw Error(`Supabase RPC ${name}: HTTP ${response.status} (verifique migracao e token)`)
+  if(!response.ok)
+    throw Error(`Ponte do WhatsApp ${action}: HTTP ${response.status} (verifique deploy da Edge Function)`)
   return response.json()
 }
+
 async function evo(e, method, path, body) {
   const response = await fetch(`${evoBase}${path}`,{
     method,signal:AbortSignal.timeout(12000),
