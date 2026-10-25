@@ -72,6 +72,7 @@ export default function App() {
                   </Route>
                   <Route element={<RequireSuperadmin />}>
                     <Route path="/plataforma" element={<PlatformPage />} />
+                    <Route path="/plataforma/whatsapp-teste" element={<WhatsAppPage />} />
                   </Route>
                 </Route>
               </Route>
