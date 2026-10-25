@@ -21,12 +21,16 @@ on:
       - 'src/lib/**'
       - 'README.md'
       - 'supabase/migrations/**'
+      - 'supabase/audits/**'
       - 'supabase/tests/**'
       - 'src/components/layout/AppShell.tsx'
       - 'package*.json'
       - 'scripts/browser-smoke.mjs'
       - 'scripts/asaas-sandbox-e2e.mjs'
       - 'scripts/test-db-windows.ps1'
+      - 'scripts/backup-producao-readonly.ps1'
+      - 'scripts/restore-backup-isolated-windows.ps1'
+      - 'docs/recovery-drift-audit-2026-10-24.md'
       - '.gitattributes'
       - '.github/workflows/commission-review.yml'
   workflow_dispatch:
@@ -96,17 +100,36 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Parse Windows SQL runner without running or modifying any database
+      - name: Parse all Windows database scripts without contacting any database
         shell: pwsh
         run: |
-          $tokens = $null
-          $parseErrors = $null
-          $file = (Resolve-Path 'scripts/test-db-windows.ps1').Path
-          [System.Management.Automation.Language.Parser]::ParseFile(
-            $file, [ref]$tokens, [ref]$parseErrors
-          ) | Out-Null
-          if ($parseErrors.Count -gt 0) {
-            $parseErrors | ForEach-Object { Write-Error $_.Message }
-            exit 1
+          $files = @(
+            'scripts/test-db-windows.ps1',
+            'scripts/backup-producao-readonly.ps1',
+            'scripts/restore-backup-isolated-windows.ps1'
+          )
+          foreach ($path in $files) {
+            $tokens = $null
+            $parseErrors = $null
+            $file = (Resolve-Path $path).Path
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $file, [ref]$tokens, [ref]$parseErrors
+            ) | Out-Null
+            if ($parseErrors.Count -gt 0) {
+              $parseErrors | ForEach-Object { Write-Error $_.Message }
+              exit 1
+            }
+            Write-Host "PowerShell syntax OK: $path"
           }
-          Write-Host 'PowerShell syntax OK'
+      - name: Refuse missing backup without any database action
+        shell: pwsh
+        run: |
+          $script = (Resolve-Path 'scripts/restore-backup-isolated-windows.ps1').Path
+          $missing = Join-Path $env:RUNNER_TEMP 'missing-orbitagenda-private-backup'
+          & pwsh -NoProfile -NonInteractive -File $script -BackupDir $missing -LocalProjectDir $missing *>&1 | Out-String | Set-Content -Path (Join-Path $env:RUNNER_TEMP 'restore-preflight.txt')
+          if ($LASTEXITCODE -eq 0) { throw 'Unsafe: missing backup was accepted' }
+          if (-not (Select-String -Path (Join-Path $env:RUNNER_TEMP 'restore-preflight.txt') -Pattern 'VERIFICACAO_PENDENTE' -Quiet)) {
+            throw 'Expected preflight rejection missing'
+          }
+          Write-Host 'PASS: absent backup refused before Docker activity'
+          $global:LASTEXITCODE = 0
