@@ -85,7 +85,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <NavItem entry={{ label: 'Plataforma', to: '/plataforma', icon: 'shield' }} onNavigate={onNavigate} />
           </div>
         )}
-        {ownedCount < 3 && (
+        {!isSuperadmin && ownedCount < 3 && (
           <Link to="/criar-estabelecimento" onClick={onNavigate} className="mt-5 flex h-9 items-center gap-2.5 rounded-md px-2.5 text-sm text-white/45 transition-colors duration-150 hover:bg-white/[0.04] hover:text-white motion-reduce:transition-none">
             <Icon name="plus" className="size-4 shrink-0" />Novo estabelecimento
           </Link>
