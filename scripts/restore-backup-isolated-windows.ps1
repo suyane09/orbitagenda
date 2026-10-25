@@ -120,8 +120,9 @@ try {
   $authUsers = [int](Q 'SELECT count(*) FROM auth.users;')
   $businesses = [int](Q 'SELECT count(*) FROM public.establishments;')
   $subscriptions = [int](Q 'SELECT count(*) FROM public.establishment_subscriptions;')
-  if ($tables -lt 22 -or $unprotected -ne 0 -or $badKeys -ne 0) {
-    StopSafe 'Restore committed, structural checks failed; do not rerun into this container'
+  if ($tables -lt 22 -or $unprotected -ne 0 -or $badKeys -ne 0 -or
+      $authUsers -lt 1 -or $businesses -lt 1 -or $subscriptions -lt 1) {
+    StopSafe 'Restore committed, structural/essential-data checks failed; do not rerun into this container'
   }
   # Verify foreign-key row contents, since restoring with session_replication_role=replica disables FK triggers.
   $fkAudit = @'
