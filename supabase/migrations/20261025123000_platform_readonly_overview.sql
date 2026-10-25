@@ -18,7 +18,7 @@ begin
     'updated_at', now(),
     'summary', jsonb_build_object(
       'establishments', (select count(*) from public.establishments),
-      'registered_users', (select count(*) from auth.users where deleted_at is null),
+      'registered_users', (select count(*) from auth.users),
       'active_team_members', (select count(distinct m.user_id) from public.memberships m where m.is_active),
       'customers', (select count(*) from public.customers),
       'active_professionals', (select count(*) from public.professionals p where p.is_active),
