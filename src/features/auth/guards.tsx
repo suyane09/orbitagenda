@@ -22,6 +22,6 @@ export function RequireAuth() {
 export function PublicOnly() {
   const { session, loading, recovery } = useAuth()
   if (loading) return <FullScreenLoader />
-  if (session && !recovery) return <Navigate to="/app" replace />
+  if (session && !recovery) return <Navigate to="/" replace />
   return <Outlet />
 }
