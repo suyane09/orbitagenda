@@ -39,7 +39,7 @@ Deixe esta janela aberta e o Docker Desktop funcionando. Para outra barbearia, g
 
 ## Dependências de publicação
 
-1. Aplicar somente a migração aditiva validada `20261025162000_whatsapp_saas_outbound_pilot.sql` (o histórico remoto de migrações diverge; não usar db push cego).
+1. Aplicar somente a migração aditiva validada `20261025153631_whatsapp_saas_outbound_pilot.sql` (o histórico remoto de migrações diverge; não usar db push cego).
 2. Implantar a nova Edge Function `whatsapp-worker` com `verify_jwt=false` e validação `withSupabase({auth:['publishable']})`; a própria função só libera as ações permitidas e é protegida por token individual e rate limiting. A implantação com JWT habilitado fará o worker falhar.
 3. Implantar a alteração da Edge Function preexistente `public-booking` para gravar opt-in, preservando segredo Turnstile, antiabuso, gateway e rotas anteriores.
 4. Atualizar o frontend após CI e confirmar login tanto de dono normal como superadmin.
