@@ -132,3 +132,4 @@ jobs:
             throw 'Expected preflight rejection missing'
           }
           Write-Host 'PASS: absent backup refused before Docker activity'
+          $global:LASTEXITCODE = 0
