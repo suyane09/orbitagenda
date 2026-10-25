@@ -12,3 +12,8 @@ supabase/.branches
 *backup*.sql
 *.dump
 *.backup
+
+# WhatsApp local tokens and session details; never commit
+.workers/
+.worker.json
+orbitagenda-whatsapp-qr-local.html
