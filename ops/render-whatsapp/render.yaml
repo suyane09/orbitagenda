@@ -1,0 +1,97 @@
+# OrbitAgenda WhatsApp cloud - isolated paid production OPTION.
+# DOES NOT deploy automatically: stored under ops/render-whatsapp/render.yaml.
+# Requires user approval of recurring Render compute, Postgres, Key Value and disk fees.
+# Before use: validate with Render CLI and test number-only pairing in sandbox.
+previews:
+  generation: off
+
+databases:
+  - name: orbitagenda-whatsapp-db
+    region: virginia
+    plan: basic-256mb
+    postgresMajorVersion: "17"
+    databaseName: evolution
+    ipAllowList: []
+
+services:
+  - name: orbitagenda-whatsapp-cache
+    type: keyvalue
+    region: virginia
+    plan: 256mb
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+  - name: orbitagenda-whatsapp-evolution
+    type: pserv
+    runtime: image
+    region: virginia
+    plan: 1c-2g
+    image:
+      url: docker.io/evoapicloud/evolution-api:v2.3.7
+    disk:
+      name: evolution-sessions
+      mountPath: /evolution/instances
+      sizeGB: 1
+    envVars:
+      - key: SERVER_PORT
+        value: "8080"
+      - key: SERVER_URL
+        value: http://orbitagenda-whatsapp-evolution:8080
+      - key: AUTHENTICATION_API_KEY
+        generateValue: true
+      - key: AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES
+        value: "false"
+      - key: CORS_ORIGIN
+        value: http://orbitagenda-whatsapp-evolution:8080
+      - key: DATABASE_PROVIDER
+        value: postgresql
+      - key: DATABASE_CONNECTION_URI
+        fromDatabase:
+          name: orbitagenda-whatsapp-db
+          property: connectionString
+      - key: DATABASE_CONNECTION_CLIENT_NAME
+        value: orbitagenda-whatsapp-cloud
+      - key: CACHE_REDIS_ENABLED
+        value: "true"
+      - key: CACHE_REDIS_URI
+        fromService:
+          type: keyvalue
+          name: orbitagenda-whatsapp-cache
+          property: connectionString
+      - key: CACHE_REDIS_PREFIX_KEY
+        value: orbitagenda-whatsapp-cloud
+      - key: CACHE_REDIS_SAVE_INSTANCES
+        value: "false"
+      - key: WEBHOOK_GLOBAL_ENABLED
+        value: "false"
+      - key: TELEMETRY_ENABLED
+        value: "false"
+      - key: LOG_BAILEYS
+        value: error
+
+  - name: orbitagenda-whatsapp-worker
+    type: worker
+    runtime: node
+    region: virginia
+    plan: 0.5c-512mb
+    buildCommand: node --check tools/whatsapp-cloud/worker.mjs
+    startCommand: node tools/whatsapp-cloud/worker.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SUPABASE_URL
+        value: https://peajkbjwusivdrqjoqtl.supabase.co
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: ORBIT_WHATSAPP_CLOUD_SECRET
+        sync: false
+      - key: EVOLUTION_INTERNAL_HOSTPORT
+        fromService:
+          type: pserv
+          name: orbitagenda-whatsapp-evolution
+          property: hostport
+      - key: EVOLUTION_API_KEY
+        fromService:
+          type: pserv
+          name: orbitagenda-whatsapp-evolution
+          envVarKey: AUTHENTICATION_API_KEY
