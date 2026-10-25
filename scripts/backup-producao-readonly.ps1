@@ -49,9 +49,9 @@ try {
   $roles = Join-Path $target 'roles.sql'
   $schema = Join-Path $target 'schema.sql'
   $data = Join-Path $target 'data.sql'
-  Cli-Dump @('--role-only', '--file', $roles)
-  Cli-Dump @('--file', $schema)
-  Cli-Dump @('--data-only','--use-copy','--exclude','storage.buckets_vectors','--exclude','storage.vector_indexes','--file',$data)
+  Cli-Dump -flags @('--role-only', '--file', $roles)
+  Cli-Dump -flags @('--file', $schema)
+  Cli-Dump -flags @('--data-only','--use-copy','--exclude','storage.buckets_vectors','--exclude','storage.vector_indexes','--file',$data)
   $entries = @()
   foreach ($file in @($roles,$schema,$data)) {
     $item = Get-Item -LiteralPath $file -ErrorAction Stop
