@@ -50,6 +50,16 @@ Para parar apenas os contêineres deste piloto (sem apagar sessões):
 powershell -NoProfile -ExecutionPolicy Bypass -File .\testar.ps1 -Acao parar
 ```
 
+## Diagnóstico quando o Docker está em execução mas o QR não abre
+
+A porta TCP aberta (`Test-NetConnection 127.0.0.1 -Port 8088`) **não garante** que a API esteja pronta. As versões anteriores do script testavam só o endpoint raiz e classificavam qualquer erro HTTP como “Docker desligado”. Na versão corrigida, o script usa a rota autenticada `/instance/fetchInstances` e mostra o código de erro sem imprimir a resposta, que poderia conter tokens de sessão.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\\testar.ps1 -Acao diagnostico
+```
+
+O diagnóstico mostra os estados dos contêineres, o código HTTP retornado pela raiz sem proxy e a situação resumida da rota autenticada. Se a rota autenticada estiver OK, execute `-Acao qr` novamente. Nunca cole conteúdo do `.env` ou respostas JSON da API em conversas públicas.
+
 ## Segurança e limitações
 
 - Compose project fixo `orbitagenda-whatsapp-local`, volume persistente, porta da API limitada a loopback. Evite acesso público, túneis ou encaminhamento de porta.
