@@ -4,6 +4,7 @@ import { Icon, type IconName } from '@/components/ui/Icon'
 import { OrbitMark, Wordmark } from '@/components/ui/Logo'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useAccount } from '@/features/establishments/AccountProvider'
+import { isPlatformRoute } from '@/features/establishments/portalAccess'
 import { roleLabel } from '@/lib/labels'
 
 interface NavEntry { label: string; to: string; icon: IconName; end?: boolean }
@@ -46,6 +47,10 @@ function NavItem({ entry, onNavigate }: { entry: NavEntry; onNavigate?: (() => v
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user, signOut } = useAuth()
   const { profile, memberships, current, isSuperadmin, selectEstablishment } = useAccount()
+  const { pathname } = useLocation()
+  const platformMode = isPlatformRoute(isSuperadmin, pathname)
+  const ownerMembership = memberships.find((m) => m.role === 'owner')
+  const merchantMode = !platformMode && Boolean(current)
   const ownedCount = memberships.filter((m) => m.role === 'owner').length
   const name = profile?.full_name ?? 'Usuário'
 
@@ -53,7 +58,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     <div className="flex h-full flex-col overflow-y-auto border-r border-white/5 bg-ink px-3 pb-3 pt-4 text-white">
       <div className="px-1.5"><Wordmark tone="dark" /></div>
 
-      {isSuperadmin && (
+      {platformMode && (
         <div className="mt-5 flex items-center gap-2.5 rounded-md border border-orbit-glow/20 bg-white/[0.04] p-2.5">
           <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded bg-white/10">
             <Icon name="shield" className="size-4 text-orbit-glow" />
@@ -65,7 +70,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       )}
 
-      {!isSuperadmin && current && (
+      {merchantMode && current && (
         <div className="mt-5 flex items-center gap-2.5 rounded-md border border-white/10 bg-white/[0.03] p-2">
           <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded bg-white/10 text-xs font-semibold">{initials(current.establishment.name)}</span>
           <div className="min-w-0 flex-1 leading-tight">
@@ -84,18 +89,33 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       )}
 
       <nav aria-label="Principal" className="mt-6 flex-1">
-        {!isSuperadmin && current && (
+        {merchantMode && current && (
           <>
             <p className="px-2.5 pb-1.5 text-xs text-white/30">Operação</p>
             <div className="space-y-0.5">{operation.filter((e) => !['/app/financeiro', '/app/comissoes', '/app/relatorios'].includes(e.to) || current.role === 'owner').map((e) => <NavItem key={e.to} entry={e} onNavigate={onNavigate} />)}</div>
             <p className="px-2.5 pb-1.5 pt-5 text-xs text-white/30">Catálogo</p>
             <div className="space-y-0.5">{catalog.filter(e => !['/app/equipe','/app/estabelecimento','/app/assinatura','/app/whatsapp'].includes(e.to) || current.role === 'owner').map((e) => <NavItem key={e.to} entry={e} onNavigate={onNavigate} />)}</div>
+            {isSuperadmin && current.role === 'owner' && (
+              <Link to="/plataforma" onClick={onNavigate}
+                className="mt-5 flex h-10 items-center gap-2.5 rounded-md border border-orbit-glow/25 px-2.5 text-sm font-semibold text-white hover:bg-white/[0.06]">
+                <Icon name="shield" className="size-4 text-orbit-glow" />
+                Voltar à plataforma
+              </Link>
+            )}
           </>
         )}
-        {isSuperadmin && (
+        {platformMode && (
           <div className="space-y-0.5">
             <p className="px-2.5 pb-1.5 text-xs text-white/30">Minha plataforma</p>
             <NavItem entry={{ label: 'Visão geral', to: '/plataforma', icon: 'chart', end: true }} onNavigate={onNavigate} />
+            {ownerMembership && (
+              <Link to="/app"
+                onClick={() => { selectEstablishment(ownerMembership.establishment.id); onNavigate?.() }}
+                className="mt-2 flex h-10 items-center gap-2.5 rounded-md border border-orbit-glow/25 bg-orbit-glow/10 px-2.5 text-sm font-semibold text-white hover:bg-orbit-glow/20">
+                <Icon name="store" className="size-4 text-orbit-glow" />
+                Abrir minha barbearia
+              </Link>
+            )}
             {current?.role === 'owner' && (
               <NavItem entry={{ label: 'WhatsApp piloto', to: '/plataforma/whatsapp-teste', icon: 'link' }} onNavigate={onNavigate} />
             )}
@@ -115,7 +135,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full bg-white/10 text-xs font-semibold">{initials(name)}</span>
         <div className="min-w-0 flex-1 leading-tight">
           <p className="truncate text-sm font-medium">{name}</p>
-          <p className="truncate text-xs text-white/45">{isSuperadmin ? 'Superadmin da plataforma' : user?.email}</p>
+          <p className="truncate text-xs text-white/45">{platformMode ? 'Superadmin da plataforma' : user?.email}</p>
         </div>
         <button type="button" onClick={() => void signOut()} aria-label="Sair" title="Sair"
           className="grid size-8 shrink-0 place-items-center rounded-md text-white/50 transition-colors duration-150 hover:bg-white/[0.06] hover:text-white motion-reduce:transition-none">
@@ -130,6 +150,7 @@ export function AppShell() {
   const [open, setOpen] = useState(false)
   const { pathname } = useLocation()
   const { current, isSuperadmin } = useAccount()
+  const platformMode = isPlatformRoute(isSuperadmin, pathname)
   useEffect(() => setOpen(false), [pathname])
   useEffect(() => {
     if (!open) return
@@ -144,7 +165,7 @@ export function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex min-h-12 items-center justify-between gap-3 border-b border-hairline bg-surface pl-4 pr-2 pt-[env(safe-area-inset-top)] lg:hidden">
-          {isSuperadmin ? (
+          {platformMode ? (
             <span className="inline-flex min-w-0 items-center gap-2.5">
               <Icon name="shield" className="size-5 text-ink" />
               <span className="truncate font-display text-[0.95rem] font-semibold tracking-tight">Central da plataforma</span>
