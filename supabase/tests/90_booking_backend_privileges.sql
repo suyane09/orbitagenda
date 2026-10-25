@@ -55,5 +55,5 @@ begin
  exception when sqlstate 'P0002' then
    raise notice 'PASS booking passed billing guard and correctly rejected missing service';
  end;
-end $$;
+end $test$;
 reset role;
