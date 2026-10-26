@@ -450,8 +450,8 @@ export default function DashboardPage() {
         </Kpi>
       </section>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_21rem]">
-        <section id="agenda-hoje" aria-label="Agenda de hoje" className={`${card} @container scroll-mt-4 xl:col-start-1`}>
+      <div className="mt-4 grid gap-4">
+        <section id="agenda-hoje" aria-label="Agenda de hoje" className={`${card} @container scroll-mt-4 `}>
           <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-5 pb-3 pt-4">
             <div className="flex flex-wrap items-baseline gap-x-3">
               <h2 className="font-display text-lg font-semibold tracking-tight">Agenda de hoje</h2>
@@ -533,7 +533,7 @@ export default function DashboardPage() {
           )}
         </section>
 
-        <div className="grid min-w-0 content-start gap-4 md:grid-cols-2 md:items-start xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:grid-cols-1">
+        <div className="grid min-w-0 content-start gap-4 md:grid-cols-2 md:items-start ">
           <Panel title="Ações">
             <div className="px-3 pb-3 pt-1">
               {data && (stats.pending > 0 || (!needsSetup && base.length === 0)) && (
@@ -595,7 +595,7 @@ export default function DashboardPage() {
           </Panel>
         </div>
 
-        <div className="grid min-w-0 content-start gap-4 md:grid-cols-2 md:items-start xl:col-start-1">
+        <div className="grid min-w-0 content-start gap-4 md:grid-cols-2 md:items-start ">
           <Panel title="Ativação" meta={data ? (allDone ? <span className="font-medium text-ok">Completa</span> : `${stepsDone} de ${steps.length}`) : undefined}>
             {!data ? (
               <div className="space-y-3 p-5" role="status" aria-label="Carregando ativação">{Array.from({ length: 4 }, (_, i) => <span key={i} className={`${bar} h-4 w-full`} />)}</div>
