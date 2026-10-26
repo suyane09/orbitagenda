@@ -41,3 +41,11 @@ body {
   outline-offset: 2px;
   border-radius: 0.375rem;
 }
+
+/* Keep every app page aligned to the same available width as Visão Geral.
+   Scope to the direct route container so forms, dialogs and nested cards retain
+   their own intentional maximum widths. */
+.app-workspace > :first-child {
+  width: 100%;
+  max-width: none;
+}
