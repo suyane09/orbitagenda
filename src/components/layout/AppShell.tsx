@@ -131,6 +131,30 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         )}
       </nav>
 
+      {isSuperadmin && (
+        <div className="mt-4 space-y-1 border-t border-white/10 pt-3" aria-label="Alternar ambiente">
+          <p className="px-2.5 pb-1 text-xs font-medium text-white/45">Alternar ambiente</p>
+          <Link to="/plataforma" onClick={onNavigate}
+            aria-current={platformMode ? 'page' : undefined}
+            className={`flex min-h-10 items-center gap-2.5 rounded-md px-2.5 text-sm transition-colors ${platformMode ? 'bg-white/10 font-semibold text-white' : 'text-white/65 hover:bg-white/[0.06] hover:text-white'}`}>
+            <Icon name="shield" className="size-4 shrink-0" />
+            Administração da plataforma
+          </Link>
+          {memberships.filter((m) => m.role === 'owner').map((m) => (
+            <Link key={m.id} to="/app"
+              onClick={() => { selectEstablishment(m.establishment.id); onNavigate?.() }}
+              aria-current={!platformMode && current?.establishment.id === m.establishment.id ? 'page' : undefined}
+              className={`flex min-h-10 items-center gap-2.5 rounded-md px-2.5 text-sm transition-colors ${!platformMode && current?.establishment.id === m.establishment.id ? 'bg-white/10 font-semibold text-white' : 'text-white/65 hover:bg-white/[0.06] hover:text-white'}`}>
+              <Icon name="store" className="size-4 shrink-0" />
+              <span className="truncate">{m.establishment.name}</span>
+            </Link>
+          ))}
+          {!ownerMembership && (
+            <p className="px-2.5 pt-1 text-xs text-white/45">Nenhum estabelecimento próprio disponível nesta sessão.</p>
+          )}
+        </div>
+      )}
+
       <div className="mt-4 flex items-center gap-2.5 border-t border-white/10 pt-3">
         <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full bg-white/10 text-xs font-semibold">{initials(name)}</span>
         <div className="min-w-0 flex-1 leading-tight">
