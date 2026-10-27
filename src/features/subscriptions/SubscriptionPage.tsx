@@ -71,7 +71,7 @@ export default function SubscriptionPage() {
   if(!owner)return <p className="text-sm text-slate">Área disponível apenas para o proprietário.</p>
   const awaitingFirstPayment = sub?.status === 'past_due' && !sub?.asaas_subscription_id
   const statusTone = sub?.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : sub?.status === 'trialing' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-paper text-slate border-hairline'
-  return <div className="w-full min-w-0 space-y-3 pb-8 sm:space-y-5 sm:pb-12">
+  return <div className="w-full min-w-0 space-y-3 px-4 py-6 sm:space-y-5 sm:px-6 lg:px-8 lg:py-8">
     <header className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-end sm:gap-4">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[.18em] text-slate">Financeiro · Assinatura</p>
