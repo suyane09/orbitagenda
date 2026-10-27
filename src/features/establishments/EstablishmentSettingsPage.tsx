@@ -51,7 +51,7 @@ export default function EstablishmentSettingsPage() {
     finally {setSaving(false)}
   }
   if(!isOwner || !est)return <div className={panel}><h1 className="font-display text-xl font-semibold">Estabelecimento</h1><p className="mt-2 text-sm text-slate">Somente o proprietário pode editar estas informações.</p></div>
-  return <div className="w-full min-w-0 space-y-5 pb-8 sm:pb-12">
+  return <div className="w-full min-w-0 space-y-5 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
     <header>
       <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-slate">Configurações</p>
       <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight sm:text-3xl">Meu estabelecimento</h1>
