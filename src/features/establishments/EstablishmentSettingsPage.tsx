@@ -7,7 +7,7 @@ import { describeError } from '@/lib/errors'
 import { BRAZIL_TIMEZONES, BUSINESS_TYPES, establishmentSchema, fieldErrors } from '@/lib/validation'
 import { supabase } from '@/lib/supabase'
 
-const panel = 'rounded-xl border border-hairline bg-surface p-5 sm:p-6'
+const panel = 'min-w-0 rounded-xl border border-hairline bg-surface p-4 sm:p-6'
 
 export default function EstablishmentSettingsPage() {
   const { current, refresh } = useAccount()
@@ -51,15 +51,15 @@ export default function EstablishmentSettingsPage() {
     finally {setSaving(false)}
   }
   if(!isOwner || !est)return <div className={panel}><h1 className="font-display text-xl font-semibold">Estabelecimento</h1><p className="mt-2 text-sm text-slate">Somente o proprietário pode editar estas informações.</p></div>
-  return <div className="mx-auto max-w-5xl space-y-5 pb-12">
+  return <div className="w-full min-w-0 space-y-5 pb-8 sm:pb-12">
     <header>
       <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-slate">Configurações</p>
-      <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight">Meu estabelecimento</h1>
+      <h1 className="mt-1 font-display text-2xl font-semibold tracking-tight sm:text-3xl">Meu estabelecimento</h1>
       <p className="mt-2 text-sm text-slate">Mantenha as informações da empresa atualizadas e compartilhe sua agenda pública.</p>
     </header>
     {error&&<p role="alert" className="rounded-lg bg-danger-soft p-4 text-sm text-danger">{error}</p>}
     {success&&<p role="status" className="rounded-lg bg-ok-soft p-4 text-sm text-ok">{success}</p>}
-    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(270px,340px)]">
+    <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(270px,340px)]">
       <section className={panel}>
         <h2 className="font-display text-lg font-semibold">Dados da empresa</h2>
         <form onSubmit={e=>void save(e)} className="mt-5 space-y-4">
