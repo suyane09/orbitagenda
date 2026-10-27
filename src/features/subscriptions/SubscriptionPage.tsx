@@ -71,11 +71,11 @@ export default function SubscriptionPage() {
   if(!owner)return <p className="text-sm text-slate">Área disponível apenas para o proprietário.</p>
   const awaitingFirstPayment = sub?.status === 'past_due' && !sub?.asaas_subscription_id
   const statusTone = sub?.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : sub?.status === 'trialing' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-paper text-slate border-hairline'
-  return <div className="mx-auto max-w-5xl space-y-6 pb-14">
+  return <div className="w-full min-w-0 space-y-5 pb-8 sm:space-y-6 sm:pb-14">
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[.18em] text-slate">Financeiro · Assinatura</p>
-        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Seu plano, com tudo às claras.</h1>
+        <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight sm:text-3xl">Seu plano, com tudo às claras.</h1>
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate">Consulte sua mensalidade, acompanhe o status e gerencie a contratação com segurança.</p>
       </div>
       <button type="button" disabled={loading||refreshing} onClick={async()=>{setRefreshing(true);try{await load()}finally{setRefreshing(false)}}} className="rounded-xl border border-hairline bg-surface px-4 py-2.5 text-sm font-medium transition hover:bg-paper disabled:opacity-50">↻ Atualizar dados</button>
