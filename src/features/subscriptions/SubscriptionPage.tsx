@@ -72,33 +72,33 @@ export default function SubscriptionPage() {
   const awaitingFirstPayment = sub?.status === 'past_due' && !sub?.asaas_subscription_id
   const statusTone = sub?.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : sub?.status === 'trialing' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-paper text-slate border-hairline'
   return <div className="w-full min-w-0 space-y-5 pb-8 sm:space-y-6 sm:pb-14">
-    <header className="flex flex-wrap items-end justify-between gap-4">
+    <header className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end sm:gap-4">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[.18em] text-slate">Financeiro · Assinatura</p>
         <h1 className="mt-2 font-display text-2xl font-semibold tracking-tight sm:text-3xl">Seu plano, com tudo às claras.</h1>
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate">Consulte sua mensalidade, acompanhe o status e gerencie a contratação com segurança.</p>
       </div>
-      <button type="button" disabled={loading||refreshing} onClick={async()=>{setRefreshing(true);try{await load()}finally{setRefreshing(false)}}} className="rounded-xl border border-hairline bg-surface px-4 py-2.5 text-sm font-medium transition hover:bg-paper disabled:opacity-50">↻ Atualizar dados</button>
+      <button type="button" disabled={loading||refreshing} onClick={async()=>{setRefreshing(true);try{await load()}finally{setRefreshing(false)}}} className="rounded-xl border border-hairline bg-surface px-3 py-2 text-sm font-medium transition hover:bg-paper disabled:opacity-50">↻ Atualizar dados</button>
     </header>
     {error&&<p role="alert" className="rounded-xl bg-danger-soft p-4 text-sm text-danger">{error}</p>}
     {loading?<section className="rounded-2xl border border-hairline bg-surface p-8 text-sm text-slate" role="status">Carregando seu plano…</section>:
-    !sub?<section className="rounded-2xl border border-hairline bg-surface p-8">
+    !sub?<section className="rounded-2xl border border-hairline bg-surface p-4 sm:p-6">
       <span className="rounded-full bg-paper px-3 py-1 text-xs font-semibold text-slate">Aguardando atribuição</span>
       <h2 className="mt-5 font-display text-2xl font-semibold">Seu plano ainda não foi atribuído</h2>
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate">Seu estabelecimento já está cadastrado. A administração precisa atribuir um plano antes da contratação. Nenhuma cobrança é criada automaticamente.</p>
     </section>:
     <>
       <section className="overflow-hidden rounded-2xl border border-hairline bg-surface">
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-hairline p-6 sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-hairline p-4 sm:gap-4 sm:p-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[.16em] text-slate">Seu plano atual</p>
-            <h2 className="mt-2 font-display text-3xl font-semibold">{plan?.name ?? 'Plano cadastrado'}</h2>
+            <h2 className="mt-2 font-display text-2xl font-semibold sm:text-3xl">{plan?.name ?? 'Plano cadastrado'}</h2>
             <p className="mt-2 text-sm text-slate">Gestão do seu estabelecimento em um só lugar.</p>
           </div>
           <span className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold ${statusTone}`}>{awaitingFirstPayment ? 'Aguardando contratação' : (names[sub.status]??sub.status)}</span>
         </div>
         <div className="grid gap-0 sm:grid-cols-2">
-          <div className="border-b border-hairline p-6 sm:border-b-0 sm:border-r sm:p-8">
+          <div className="border-b border-hairline p-4 sm:border-b-0 sm:border-r sm:p-6">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate">Mensalidade</p>
             <div className="mt-3 flex items-baseline gap-2">
               <span className="font-display text-4xl font-semibold tracking-tight">{plan?.monthly_price_cents==null?'A definir':formatBRL(plan.monthly_price_cents)}</span>
