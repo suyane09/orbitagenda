@@ -328,7 +328,7 @@ export default function AgendaPage() {
   const daily = byDay[date] ?? []
 
   return (
-    <div className={`mx-auto max-w-7xl px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 sm:px-6 lg:pt-6 ${view === 'day' && !error && rows !== null ? 'flex h-full min-h-[46rem] flex-col gap-4' : 'space-y-5'}`}>
+    <div className={`w-full min-w-0 px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-6 sm:px-6 lg:px-8 lg:pt-8 ${view === 'day' && !error && rows !== null ? 'flex h-full min-h-[46rem] flex-col gap-4' : 'space-y-5'}`}>
       <header className="flex shrink-0 flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-orbit">Operação / Agendamentos</p>
