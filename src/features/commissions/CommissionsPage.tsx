@@ -98,7 +98,7 @@ export default function CommissionsPage() {
 
   if (!isOwner) return <ErrorState title="Acesso restrito" message="Somente o proprietário pode visualizar comissões." />
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-12">
+    <div className="w-full min-w-0 space-y-6 px-4 py-6 pb-12 sm:px-6 lg:px-8 lg:py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h1 className="font-display text-2xl font-semibold text-ink">Comissões</h1>
           <p className="mt-1 text-sm text-slate">Comissões geradas, repasses e saldo por profissional.</p></div>

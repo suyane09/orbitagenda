@@ -104,7 +104,7 @@ export default function FinancePage() {
   }
 
   if (!allowed) return <div className={`${card} p-6`}><h1 className="font-display text-xl font-semibold">Financeiro</h1><p className="mt-2 text-sm text-slate">Acesso reservado ao proprietário do estabelecimento.</p></div>
-  return <div className="mx-auto max-w-6xl space-y-5 pb-12">
+  return <div className="w-full min-w-0 space-y-5 px-4 py-6 pb-12 sm:px-6 lg:px-8 lg:py-8">
     <header>
       <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-slate">Gestão</p>
       <h1 className="mt-1 font-display text-[1.875rem] font-semibold leading-tight tracking-tight sm:text-[2.125rem]">Financeiro</h1>

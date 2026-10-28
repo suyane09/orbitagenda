@@ -107,7 +107,7 @@ export default function WhatsAppPage() {
   const showQr=connection?.state==='qr' && connection.qr_image?.startsWith('data:image/') &&
     connection.qr_expires_at && new Date(connection.qr_expires_at).getTime()>Date.now()
 
-  return <div className="mx-auto max-w-5xl space-y-6 px-5 py-8 sm:px-8 lg:py-12">
+  return <div className="w-full min-w-0 space-y-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
     <header>
       <p className="text-xs font-semibold uppercase tracking-widest text-slate">Automações</p>
       <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">WhatsApp automático</h1>
