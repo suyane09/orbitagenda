@@ -66,7 +66,7 @@ export default function ReportsPage() {
   const report = useMemo(() => calculateReport(ap,entries),[ap,entries])
   if (!owner) return <ErrorState title="Acesso restrito" message="Somente o proprietário pode consultar os relatórios." />
 
-  return <div className="mx-auto max-w-6xl space-y-5 pb-12">
+  return <div className="w-full min-w-0 space-y-5 px-4 py-6 pb-12 sm:px-6 lg:px-8 lg:py-8">
     <header>
       <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-slate">Gestão</p>
       <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight">Relatórios</h1>
