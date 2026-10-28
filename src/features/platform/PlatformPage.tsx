@@ -101,7 +101,7 @@ export default function PlatformPage() {
 
   const s = overview?.summary
 
-  return <div className="mx-auto w-full max-w-7xl space-y-7 px-5 py-8 sm:px-8 lg:py-12">
+  return <div className="w-full min-w-0 space-y-7 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orbit">Visão da proprietária</p>
