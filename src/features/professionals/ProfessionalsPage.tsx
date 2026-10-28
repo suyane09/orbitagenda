@@ -195,7 +195,7 @@ export default function ProfessionalsPage() {
   const filtering = query.trim() !== '' || status !== 'all'
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8 lg:py-12">
+    <div className="w-full min-w-0 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-[2rem] font-semibold leading-tight tracking-tight sm:text-[2.4rem]">Profissionais</h1>
