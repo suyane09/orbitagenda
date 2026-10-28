@@ -5,6 +5,7 @@ import { describeError } from '@/lib/errors'
 import { useAuth } from '@/features/auth/AuthProvider'
 import type { Membership, Profile } from '@/types/models'
 import { loadAccount } from './api'
+import { pickCurrent } from './portalAccess'
 
 interface AccountState {
   profile: Profile | null
@@ -18,12 +19,13 @@ interface AccountState {
 
 const AccountContext = createContext<AccountState | null>(null)
 const STORAGE_KEY = 'orbit:establishment'
+const keyFor = (userId: string) => `${STORAGE_KEY}:${userId}`
 
-function readStored(): string | null {
-  try { return localStorage.getItem(STORAGE_KEY) } catch { return null }
+function readStored(userId: string): string | null {
+  try { return userId ? localStorage.getItem(keyFor(userId)) : null } catch { return null }
 }
-function writeStored(id: string) {
-  try { localStorage.setItem(STORAGE_KEY, id) } catch { /* modo privado: ignorar */ }
+function writeStored(userId: string, id: string) {
+  try { if (userId) localStorage.setItem(keyFor(userId), id) } catch { /* modo privado: ignorar */ }
 }
 
 export function AccountProvider({ children }: { children: ReactNode }) {
@@ -32,13 +34,13 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<'loading' | 'error' | 'ready'>('loading')
   const [error, setError] = useState('')
   const [data, setData] = useState<{ profile: Profile | null; memberships: Membership[]; isSuperadmin: boolean }>({ profile: null, memberships: [], isSuperadmin: false })
-  const [selectedId, setSelectedId] = useState<string | null>(readStored)
+  const [selectedId, setSelectedId] = useState<string | null>(() => readStored(userId))
 
   const refresh = useCallback(async (selectId?: string) => {
     try {
       const next = await loadAccount(userId)
       setData(next)
-      if (selectId) { setSelectedId(selectId); writeStored(selectId) }
+      if (selectId) { setSelectedId(selectId); writeStored(userId, selectId) }
       setError('')
       setStatus('ready')
     } catch (e) {
@@ -48,13 +50,15 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   }, [userId])
 
   useEffect(() => {
+    setData({ profile: null, memberships: [], isSuperadmin: false })
+    setSelectedId(readStored(userId))
     setStatus('loading')
     void refresh()
-  }, [refresh])
+  }, [refresh, userId])
 
   const current = useMemo(
-    () => data.memberships.find((m) => m.establishment.id === selectedId) ?? data.memberships[0] ?? null,
-    [data.memberships, selectedId],
+    () => pickCurrent(data.memberships, data.isSuperadmin, selectedId),
+    [data.memberships, data.isSuperadmin, selectedId],
   )
 
   const value = useMemo<AccountState>(() => ({
@@ -62,10 +66,10 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     current,
     selectEstablishment: (id) => {
       if (!data.memberships.some((m) => m.establishment.id === id)) return
-      setSelectedId(id); writeStored(id)
+      setSelectedId(id); writeStored(userId, id)
     },
     refresh,
-  }), [data, current, refresh])
+  }), [data, current, refresh, userId])
 
   if (status === 'loading') return <FullScreenLoader label="Carregando sua conta…" />
   if (status === 'error') {

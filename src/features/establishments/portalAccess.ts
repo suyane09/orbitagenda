@@ -16,3 +16,15 @@ export function isPlatformRoute(isSuperadmin: boolean, pathname: string): boolea
 export function portalHome(isSuperadmin: boolean): '/plataforma' | '/app' {
   return isSuperadmin ? '/plataforma' : '/app'
 }
+
+/** Choose an authorized membership, preferring owner access for platform admins. */
+export function pickCurrent<T extends { role: Membership['role']; establishment: { id: string } }>(
+  memberships: T[], isSuperadmin: boolean, selectedId: string | null,
+): T | null {
+  const picked = memberships.find(m => m.establishment.id === selectedId)
+  if (isSuperadmin) {
+    if (picked?.role === 'owner') return picked
+    return memberships.find(m => m.role === 'owner') ?? picked ?? memberships[0] ?? null
+  }
+  return picked ?? memberships[0] ?? null
+}

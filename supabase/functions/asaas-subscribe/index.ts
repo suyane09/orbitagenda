@@ -29,7 +29,7 @@ async function requestAsaas(endpoint: string, method: string, data?: Record<stri
   const result = await response.json().catch(() => null)
   if (!response.ok || !result || typeof result !== 'object') {
     // API error details may contain personal data: never return or log them.
-    throw new Error('asaas_upstream_failure')
+    throw Object.assign(new Error('asaas_upstream_failure'), { status: response.status })
   }
   return result as Record<string, unknown>
 }
@@ -60,7 +60,7 @@ Deno.serve(async req => {
     .eq('role','owner').eq('is_active',true).maybeSingle()
   if (ownerError || !owner) return reply(403, 'Somente o proprietário pode contratar.')
   const { data: sub, error: subError } = await admin.from('establishment_subscriptions')
-    .select('establishment_id,plan_id,status,asaas_subscription_id,asaas_provisioning_started_at')
+    .select('establishment_id,plan_id,status,asaas_subscription_id,asaas_provisioning_started_at,asaas_customer_id')
     .eq('establishment_id',estId).maybeSingle()
   if (subError || !sub) return reply(409, 'Um plano precisa ser atribuído pela administração antes da contratação.')
   if (!['trialing','active','past_due'].includes(sub.status)) return reply(409,'O plano está suspenso ou cancelado. Fale com a administração.')
@@ -82,23 +82,40 @@ Deno.serve(async req => {
     .eq('establishment_id',estId).is('asaas_provisioning_started_at',null)
     .is('asaas_subscription_id',null).select('establishment_id').maybeSingle()
   if (reserveError || !reservation) return reply(409, 'Uma contratação já foi iniciada. Consulte o suporte.')
+  // Definitive 4xx responses can release the reservation; ambiguous failures stay blocked.
+  let customerId: string | null = typeof sub.asaas_customer_id === 'string' && /^cus_[a-zA-Z0-9]+$/.test(sub.asaas_customer_id) ? sub.asaas_customer_id : null
+  const definitive = (e: unknown) => {
+    const status = (e as {status?: number})?.status
+    return typeof status === 'number' && status >= 400 && status < 500
+  }
+  async function release() {
+    const {error} = await admin.from('establishment_subscriptions')
+      .update({asaas_provisioning_started_at:null})
+      .eq('establishment_id',estId).is('asaas_subscription_id',null)
+    if(error) console.error('asaas_reservation_release_failed')
+  }
   try {
-    // Customer is attached to the establishment and not duplicated on re-entry.
-    const customer = await requestAsaas('/customers','POST',{
-      name:company.name, cpfCnpj:payload.cpfCnpj,
-      email:auth.user.email ?? undefined, externalReference:estId,
-    })
-    if (typeof customer.id !== 'string' || !customer.id.startsWith('cus_')) throw new Error('unexpected_customer')
+    if(!customerId) {
+      const customer = await requestAsaas('/customers','POST',{
+        name:company.name, cpfCnpj:payload.cpfCnpj,
+        email:auth.user.email ?? undefined, externalReference:estId,
+      }).catch(async e => { if(definitive(e)) await release(); throw e })
+      if(typeof customer.id !== 'string' || !/^cus_[a-zA-Z0-9]+$/.test(customer.id)) throw new Error('unexpected_customer')
+      customerId = customer.id
+      const {error} = await admin.from('establishment_subscriptions')
+        .update({asaas_customer_id:customerId}).eq('establishment_id',estId)
+      if(error) throw new Error('failed_to_persist_customer')
+    }
     const today = new Date()
     const nextDueDate = today.toISOString().slice(0,10)
     const subscription = await requestAsaas('/subscriptions','POST',{
-      customer:customer.id, billingType:payload.billingType,
+      customer:customerId, billingType:payload.billingType,
       value:plan.monthly_price_cents / 100, nextDueDate, cycle:'MONTHLY',
       description:`Orbit Agenda — ${plan.name}`.slice(0,500), externalReference:estId,
-    })
+    }).catch(async e => { if(definitive(e)) await release(); throw e })
     if (typeof subscription.id !== 'string' || !subscription.id.startsWith('sub_')) throw new Error('unexpected_subscription')
     const { error: saveError } = await admin.from('establishment_subscriptions')
-      .update({asaas_customer_id:customer.id,asaas_subscription_id:subscription.id,asaas_synced_at:new Date().toISOString()})
+      .update({asaas_customer_id:customerId,asaas_subscription_id:subscription.id,asaas_synced_at:new Date().toISOString()})
       .eq('establishment_id',estId).not('asaas_provisioning_started_at','is',null)
     if (saveError) throw new Error('failed_to_persist_subscription')
     return reply(200,'Assinatura criada no Asaas. Aguarde a confirmação de pagamento.',{
