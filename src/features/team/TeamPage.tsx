@@ -63,7 +63,7 @@ export default function TeamPage() {
     finally{setBusy('')}
   }
   if(!owner)return <div className={panel}><h1 className="font-display text-xl font-semibold">Equipe</h1><p className="mt-2 text-slate">Somente o proprietário pode gerenciar os acessos.</p></div>
-  return <div className="mx-auto max-w-6xl space-y-5 pb-12">
+  return <div className="w-full min-w-0 space-y-5 px-4 py-6 pb-12 sm:px-6 lg:px-8 lg:py-8">
     <header>
       <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-slate">Configurações do estabelecimento</p>
       <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight">Equipe e acessos</h1>
