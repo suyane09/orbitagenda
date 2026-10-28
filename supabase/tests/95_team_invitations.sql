@@ -9,6 +9,8 @@ set role authenticated;
 select public.create_establishment('Equipe Teste', 'barbershop');
 reset role;
 select set_config('tests.team_est',(select id::text from public.establishments where slug='equipe-teste'),false);
+-- Ensure fixture has an active subscription before testing team writes.
+update public.establishment_subscriptions set status='active',current_period_end=null where establishment_id=current_setting('tests.team_est')::uuid;
 set role authenticated;
 select set_config('tests.invitation',public.create_team_invitation(current_setting('tests.team_est')::uuid,'worker@team.invalid'),false);
 do $$ begin

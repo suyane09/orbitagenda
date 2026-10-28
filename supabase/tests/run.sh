@@ -11,7 +11,7 @@ cleanup() { [ -n "$DB" ] && psql "$ADMIN_URL" -qc "drop database if exists $DB" 
 trap cleanup EXIT
 
 TOTAL_PASS=0; TOTAL_FAIL=0; STATUS=0
-for T in [1-9]0_*.sql; do
+for T in [1-9][0-9]_*.sql; do
   DB="orbit_test_$$_${T%%_*}"
   TEST_URL="$BASE/$DB"
   echo "=== $T ==="
