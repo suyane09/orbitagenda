@@ -5,7 +5,12 @@ import { Spinner } from '@/components/ui/Spinner'
 import { describeError } from '@/lib/errors'
 import { supabase } from '@/lib/supabase'
 
+const cloudEnabled = import.meta.env.VITE_WHATSAPP_CLOUD_ENABLED === 'true'
 type Connection = {
+  backend?: 'local' | 'cloud'
+  phone_e164?: string | null
+  phone_pair_code?: string | null
+  phone_pair_expires_at?: string | null
   establishment_id: string
   state: 'pending' | 'connecting' | 'qr' | 'connected' | 'disconnected' | 'error'
   enabled: boolean
@@ -40,6 +45,7 @@ export default function WhatsAppPage() {
   const [connection,setConnection] = useState<Connection | null>(null)
   const [messages,setMessages] = useState<Notification[]>([])
   const [pairing,setPairing] = useState('')
+  const [phone,setPhone] = useState('')
   const [busy,setBusy] = useState(false)
   const [loading,setLoading] = useState(true)
   const [error,setError] = useState('')
@@ -51,7 +57,9 @@ export default function WhatsAppPage() {
     try {
       const [con,history]=await Promise.all([
         supabase.from('whatsapp_connections').select(
-          'establishment_id,state,enabled,qr_image,qr_expires_at,worker_last_seen'
+          cloudEnabled
+           ? 'establishment_id,backend,phone_e164,phone_pair_code,phone_pair_expires_at,state,enabled,qr_image,qr_expires_at,worker_last_seen'
+           : 'establishment_id,state,enabled,qr_image,qr_expires_at,worker_last_seen'
         ).eq('establishment_id',establishmentId).maybeSingle(),
         supabase.from('whatsapp_outbox').select('id,kind,state,created_at,due_at')
           .eq('establishment_id',establishmentId).order('created_at',{ascending:false}).limit(20),
@@ -75,11 +83,22 @@ export default function WhatsAppPage() {
     if(!establishmentId || busy)return
     setBusy(true);setError('');setNotice('');setPairing('')
     try {
-      const {data,error:err}=await supabase.rpc('whatsapp_begin_pairing',{p_establishment_id:establishmentId})
-      if(err)throw err
-      if(typeof data!=='string'||! /^[a-f0-9]{64}$/.test(data))throw Error('Código de conexão inválido.')
-      setPairing(data)
-      setNotice('Código válido por 10 minutos. Use-o somente no worker local da Evolution API.')
+      if (cloudEnabled) {
+        if (!/^((55)?[1-9][0-9]{9,10})$/.test(phone.replace(/[^0-9]/g,''))) {
+          throw Error('Informe o número do WhatsApp com DDD.')
+        }
+        const {error:err}=await supabase.rpc('whatsapp_cloud_request',{
+          p_establishment_id:establishmentId,p_phone:phone,
+        })
+        if(err)throw err
+        setNotice('Conexão solicitada. O código aparecerá nesta página quando o servidor estiver disponível.')
+      } else {
+        const {data,error:err}=await supabase.rpc('whatsapp_begin_pairing',{p_establishment_id:establishmentId})
+        if(err)throw err
+        if(typeof data!=='string'||! /^[a-f0-9]{64}$/.test(data))throw Error('Código de conexão inválido.')
+        setPairing(data)
+        setNotice('Código válido por 10 minutos. Use-o somente no worker local da Evolution API.')
+      }
       await load()
     } catch(e){setError(describeError(e,'Não foi possível iniciar a conexão.'))}
     finally{setBusy(false)}
@@ -104,6 +123,8 @@ export default function WhatsAppPage() {
   </div>
   const online=connection?.state==='connected' && connection.worker_last_seen &&
     Date.now()-new Date(connection.worker_last_seen).getTime()<180_000
+  const showPhoneCode=cloudEnabled && connection?.backend==='cloud' && !!connection.phone_pair_code &&
+    !!connection.phone_pair_expires_at && new Date(connection.phone_pair_expires_at).getTime()>Date.now()
   const showQr=connection?.state==='qr' && connection.qr_image?.startsWith('data:image/') &&
     connection.qr_expires_at && new Date(connection.qr_expires_at).getTime()>Date.now()
 
@@ -124,20 +145,40 @@ export default function WhatsAppPage() {
           <h2 className="font-display text-xl font-semibold">Conexão da empresa</h2>
           <p className="mt-2 text-sm text-slate">{connection?stateLabel[connection.state]:'Nenhuma conexão configurada'}</p>
           {connection?.state==='connected'&&!online&&<p className="mt-2 text-sm text-danger">
-            Worker desconectado ou parado. Reinicie o processo no computador.
+            {cloudEnabled?'Servidor de WhatsApp indisponível. Os envios estão pausados.':'Worker desconectado ou parado. Reinicie o processo no computador.'}
           </p>}
         </div>
         <Button type="button" variant="outline" onClick={()=>void load()} disabled={busy}>Atualizar</Button>
       </div>
 
       {loading?<div className="mt-6 flex items-center gap-2 text-sm text-slate"><Spinner/> Consultando conexão…</div>:<>
+        {cloudEnabled && <>
+          <label htmlFor="cloud-whatsapp-number" className="mt-5 block text-sm font-semibold">
+            Número do WhatsApp da barbearia
+          </label>
+          <input id="cloud-whatsapp-number" type="tel" inputMode="tel" autoComplete="tel"
+            value={phone} onChange={event=>setPhone(event.target.value)}
+            placeholder="(82) 99999-9999"
+            className="mt-2 w-full max-w-sm rounded-xl border border-hairline bg-surface px-4 py-3 text-sm" />
+          {showPhoneCode && <div className="mt-5 rounded-xl border border-hairline bg-paper p-4">
+            <p className="text-sm font-semibold">Código para conectar pelo próprio celular</p>
+            <p className="mt-2 font-mono text-3xl font-bold tracking-widest" aria-label="Código temporário">
+              {connection?.phone_pair_code}
+            </p>
+            <p className="mt-3 text-sm text-slate">
+              Abra o WhatsApp no celular principal → Dispositivos conectados → Conectar
+              dispositivo → Conectar com número de telefone. Informe esse código temporário.
+            </p>
+            <p className="mt-2 text-xs text-slate">Confira no WhatsApp se reconhece a solicitação antes de confirmar.</p>
+          </div>}
+        </>}
         {showQr&&connection?.qr_image&&
           <div className="mt-6 flex flex-col items-start gap-2 rounded-xl border border-hairline bg-paper p-4">
             <p className="text-sm font-medium">Escaneie com o WhatsApp deste estabelecimento</p>
             <img src={connection.qr_image} alt="QR Code temporário de conexão do WhatsApp" className="h-64 w-64 rounded-lg bg-white p-2" />
             <p className="text-xs text-slate">WhatsApp → Dispositivos conectados → Conectar dispositivo. Código temporário e privado.</p>
           </div>}
-        {pairing&&
+        {!cloudEnabled&&pairing&&
           <div className="mt-6 rounded-xl bg-paper p-4">
             <p className="text-sm font-semibold">Código para vincular o worker local</p>
             <p className="mt-2 text-xs text-slate">Este código é de uso único e expira em 10 minutos. Não compartilhe.</p>
@@ -147,14 +188,16 @@ export default function WhatsAppPage() {
           </div>}
         <div className="mt-5 flex flex-wrap gap-3">
           <Button type="button" variant="outline" loading={busy} onClick={()=>void beginPairing()}>
-            {connection?'Gerar nova vinculação':'Conectar WhatsApp'}
+            {cloudEnabled?'Conectar pelo celular':connection?'Gerar nova vinculação':'Conectar WhatsApp'}
           </Button>
           {connection&&<Button type="button" disabled={busy||(!connection.enabled&&!online)}
             onClick={()=>void toggle()}>{connection.enabled?'Desativar envios':'Ativar envios'}</Button>}
         </div>
         <p className="mt-4 text-xs leading-relaxed text-slate">
           Piloto sem mensalidade de API, mas não oficial do WhatsApp: pode desconectar ou sofrer restrições.
-          Exige Docker e worker ligados. Ao gerar nova vinculação, a conexão anterior é revogada.
+          {cloudEnabled
+            ? 'O servidor central precisa estar ativo; você não precisa instalar programas. Uma nova vinculação revoga a conexão anterior.'
+            : 'Exige Docker e worker ligados. Ao gerar nova vinculação, a conexão anterior é revogada.'}
           Nunca envie mensagens sem consentimento do destinatário.
         </p>
       </>}
